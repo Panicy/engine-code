@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/loop-summary.schema.json",
+  "title": "Loop Summary",
+  "description": "单轮自动循环结束后的汇总报告。用于列出已完成、待依赖、检查失败、review 失败、需要人工处理的任务。",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "planId", "startedAt", "finishedAt", "status", "taskSummary"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "契约版本。当前固定为 0.1.0。"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^RUN-[A-Z0-9][A-Z0-9-]*$",
+      "description": "运行 ID。"
+    },
+    "planId": {
+      "type": "string",
+      "pattern": "^PLAN-[A-Z0-9][A-Z0-9-]*$",
+      "description": "任务计划 ID。"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "本轮循环开始时间。"
+    },
+    "finishedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "本轮循环结束时间。"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["complete", "has_exceptions", "failed"],
+      "description": "本轮循环结果。complete 表示无异常，has_exceptions 表示存在需要后续处理的任务，failed 表示 orchestrator 自身失败。"
+    },
+    "taskSummary": {
+      "type": "object",
+      "required": ["done", "pending", "checksFailed", "reviewFailed", "needsHuman", "cancelled"],
+      "additionalProperties": false,
+      "description": "按状态汇总任务 ID。",
+      "properties": {
+        "done": { "type": "array", "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" } },
+        "pending": { "type": "array", "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" } },
+        "checksFailed": { "type": "array", "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" } },
+        "reviewFailed": { "type": "array", "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" } },
+        "needsHuman": { "type": "array", "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" } },
+        "cancelled": { "type": "array", "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" } }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "description": "异常任务详情。pending 任务如果只是等待依赖，可以不放入 issues。",
+      "items": {
+        "type": "object",
+        "required": ["taskId", "status", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "taskId": { "type": "string", "pattern": "^TASK-[0-9]{3}$", "description": "任务 ID。" },
+          "status": {
+            "type": "string",
+            "enum": ["checks_failed", "review_failed", "needs_human"],
+            "description": "异常状态。"
+          },
+          "summary": { "type": "string", "description": "异常摘要。" },
+          "requiredDecision": { "type": "string", "description": "需要人工决策时填写。", "default": "" },
+          "artifactPath": { "type": "string", "description": "相关 task-run 或 review 文件路径。", "default": "" }
+        }
+      },
+      "default": []
+    },
+    "nextRunnableTaskIds": {
+      "type": "array",
+      "description": "下一轮可以继续自动执行的任务，通常来自 checks_failed、review_failed 或新变为 ready 的任务。",
+      "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" },
+      "default": []
+    }
+  }
+}

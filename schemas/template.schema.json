@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/template.schema.json",
+  "title": "Subproject Template",
+  "description": "子项目模板契约。模板承载具体技术栈知识，例如默认命令、默认路径、默认检查、健康检查等。引擎核心不硬编码这些内容。",
+  "type": "object",
+  "required": ["schemaVersion", "templateId", "name", "type", "sourceRepo", "defaultBranch", "pathPolicy"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "契约版本。当前固定为 0.1.0。"
+    },
+    "templateId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "模板 ID，例如 backend-starter、middle-starter、uniapp-template。"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "模板显示名称。"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["backend", "middle", "client", "service", "web", "mobile", "other"],
+      "description": "模板类型。"
+    },
+    "sourceRepo": {
+      "type": "string",
+      "format": "uri",
+      "description": "模板源仓库。"
+    },
+    "defaultBranch": {
+      "type": "string",
+      "minLength": 1,
+      "description": "模板默认分支。"
+    },
+    "workspaceDefaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "模板默认工作区命令和健康检查。",
+      "properties": {
+        "installCommands": {
+          "type": "array",
+          "description": "默认依赖安装命令。",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "devCommands": {
+          "type": "array",
+          "description": "默认开发启动命令。",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "healthChecks": {
+          "type": "array",
+          "description": "默认健康检查。",
+          "items": { "$ref": "#/$defs/checkTarget" },
+          "default": []
+        }
+      },
+      "default": {}
+    },
+    "pathPolicy": {
+      "type": "object",
+      "required": ["defaultAllowedPaths"],
+      "additionalProperties": false,
+      "description": "模板默认路径策略。",
+      "properties": {
+        "defaultAllowedPaths": {
+          "type": "array",
+          "minItems": 1,
+          "description": "默认允许修改路径。",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "defaultChecks": {
+      "type": "array",
+      "description": "模板默认检查命令。task 可继承或覆盖。",
+      "items": { "$ref": "#/$defs/check" },
+      "default": []
+    }
+  },
+  "$defs": {
+    "checkTarget": {
+      "type": "object",
+      "required": ["id", "type", "target"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "检查 ID。" },
+        "type": { "type": "string", "enum": ["http", "command"], "description": "检查类型。" },
+        "target": { "type": "string", "description": "URL 或命令。" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "name", "type", "command", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "检查 ID。" },
+        "name": { "type": "string", "description": "检查名称。" },
+        "type": { "type": "string", "enum": ["build", "lint", "typecheck", "unit", "api", "e2e", "health", "command"], "description": "检查类型。" },
+        "command": { "type": "string", "description": "检查命令。" },
+        "required": { "type": "boolean", "description": "是否必须通过。" }
+      }
+    }
+  }
+}

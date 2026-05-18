@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/skills.schema.json",
+  "title": "Codebase Skills",
+  "description": "固定代码基座的 agent skill 注册表。skill 应描述在指定基座里完成某类任务的项目级做法，而不是泛化编程建议。",
+  "type": "object",
+  "required": ["schemaVersion", "registryId", "skills"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0", "description": "契约版本。当前固定为 0.1.0。" },
+    "registryId": { "type": "string", "minLength": 1, "description": "skill 注册表 ID。可以是模板 ID，也可以是项目级注册表 ID。" },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "templateId", "name", "description", "appliesTo", "inputsRequired", "workflow", "qualityGates"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "description": "skill ID，被 task.requiredSkillId 引用。" },
+          "templateId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "该 skill 适用的模板 ID。项目级 skill 也应声明其继承或适配的模板。"
+          },
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "项目级 skill 可填写项目 ID；模板级 skill 可省略。",
+            "default": ""
+          },
+          "baseId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "项目级 skill 可填写项目内子项目 ID；模板级 skill 可省略。",
+            "default": ""
+          },
+          "extends": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "项目级 skill 可继承模板级 skill。",
+            "default": ""
+          },
+          "name": { "type": "string", "minLength": 1, "description": "skill 名称。" },
+          "description": { "type": "string", "minLength": 1, "description": "skill 用途说明。" },
+          "appliesTo": {
+            "type": "object",
+            "required": ["taskTypes", "paths"],
+            "additionalProperties": false,
+            "properties": {
+              "taskTypes": {
+                "type": "array",
+                "items": {
+                "type": "string",
+                "enum": ["setup", "schema", "backend", "middle", "client", "integration", "test", "docs", "refactor", "fix"]
+                }
+              },
+              "paths": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "inputsRequired": { "type": "array", "items": { "type": "string" } },
+          "workflow": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["step", "instruction"],
+              "additionalProperties": false,
+              "properties": {
+                "step": { "type": "integer", "minimum": 1 },
+                "instruction": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "qualityGates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "expectation"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string" },
+                "expectation": { "type": "string" }
+              }
+            }
+          },
+          "promptAddendum": { "type": "string", "default": "" }
+        }
+      }
+    }
+  }
+}

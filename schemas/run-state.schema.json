@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/run-state.schema.json",
+  "title": "Run State",
+  "description": "一次功能开发运行的整体状态。只记录当前进度和产物，不做阻塞等待。",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "prdId", "planId", "status", "taskStatuses", "artifacts"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0", "description": "契约版本。当前固定为 0.1.0。" },
+    "runId": { "type": "string", "pattern": "^RUN-[A-Z0-9][A-Z0-9-]*$" },
+    "prdId": { "type": "string", "pattern": "^PRD-[A-Z0-9][A-Z0-9-]*$" },
+    "planId": { "type": "string", "pattern": "^PLAN-[A-Z0-9][A-Z0-9-]*$" },
+    "status": { "type": "string", "enum": ["not_started", "running", "paused", "complete", "failed"], "description": "运行状态。不包含 blocked；异常由 task 状态和 loop summary 表达。" },
+    "currentTaskId": { "type": ["string", "null"], "pattern": "^TASK-[0-9]{3}$" },
+    "startedAt": { "type": ["string", "null"], "format": "date-time" },
+    "updatedAt": { "type": ["string", "null"], "format": "date-time" },
+    "taskStatuses": {
+      "type": "object",
+      "patternProperties": {
+        "^TASK-[0-9]{3}$": {
+          "type": "string",
+          "enum": ["draft", "pending", "ready", "running", "checks_failed", "review_failed", "needs_human", "done", "cancelled"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "completedTasks": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" },
+      "default": []
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "path"],
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": "string", "enum": ["taskRun", "review", "log", "report", "patch"] },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "createdAt"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "text": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "default": []
+    }
+  }
+}

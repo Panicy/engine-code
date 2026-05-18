@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/task-plan.schema.json",
+  "title": "Task Plan",
+  "description": "任务拆分契约。按用户故事组织任务，但每个 task 必须落到单个固定代码基座和单个 primary skill。",
+  "type": "object",
+  "required": ["schemaVersion", "planId", "prdId", "status", "storyGroups", "humanApproval"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0", "description": "契约版本。当前固定为 0.1.0。" },
+    "planId": { "type": "string", "pattern": "^PLAN-[A-Z0-9][A-Z0-9-]*$", "description": "任务计划 ID。" },
+    "prdId": { "type": "string", "pattern": "^PRD-[A-Z0-9][A-Z0-9-]*$", "description": "来源 PRD ID。" },
+    "status": { "type": "string", "enum": ["draft", "approved", "superseded"], "description": "任务计划状态。只有 approved 可以进入自动执行。" },
+    "createdAt": { "type": "string", "format": "date-time", "description": "创建时间。" },
+    "updatedAt": { "type": "string", "format": "date-time", "description": "更新时间。" },
+    "storyGroups": {
+      "type": "array",
+      "minItems": 1,
+      "description": "按用户故事分组的任务列表。",
+      "items": {
+        "type": "object",
+        "required": ["storyId", "title", "tasks"],
+        "additionalProperties": false,
+        "properties": {
+          "storyId": { "type": "string", "pattern": "^US-[0-9]{3}$", "description": "PRD 中的用户故事 ID。" },
+          "title": { "type": "string", "minLength": 1, "description": "用户故事标题，便于执行报告展示。" },
+          "tasks": {
+            "type": "array",
+            "minItems": 1,
+            "description": "该用户故事下的可执行任务。每个 task 单基座、单 skill、单职责。",
+            "items": { "$ref": "#/$defs/task" }
+          },
+          "acceptanceChecks": {
+            "type": "array",
+            "description": "用户故事级验收检查。通常用于跨端流程验证。",
+            "items": { "$ref": "#/$defs/check" },
+            "default": []
+          }
+        }
+      }
+    },
+    "regressionChecks": {
+      "type": "array",
+      "description": "功能级回归检查。通常在所有用户故事完成后执行。",
+      "items": { "$ref": "#/$defs/check" },
+      "default": []
+    },
+    "humanApproval": { "$ref": "#/$defs/humanApproval" }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "type",
+        "status",
+        "sourceStoryIds",
+        "targetBaseId",
+        "dependsOn",
+        "requiredSkillId",
+        "scope",
+        "allowedPaths",
+        "acceptanceCriteria",
+        "checks",
+        "contextBudget",
+        "retryPolicy"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^TASK-[0-9]{3}$", "description": "任务 ID。" },
+        "title": { "type": "string", "minLength": 1, "description": "任务标题。" },
+        "type": {
+          "type": "string",
+          "enum": ["setup", "schema", "backend", "middle", "client", "integration", "test", "docs", "refactor", "fix"],
+          "description": "任务类型。用于 skill 匹配和报告分组。"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "pending", "ready", "running", "checks_failed", "review_failed", "needs_human", "done", "cancelled"],
+          "description": "任务状态。引擎不做阻塞等待，只标记状态并在循环结束汇总异常。"
+        },
+        "sourceStoryIds": {
+          "type": "array",
+          "minItems": 1,
+          "description": "该任务服务的用户故事 ID。大多数情况下只有一个。",
+          "items": { "type": "string", "pattern": "^US-[0-9]{3}$" }
+        },
+        "targetBaseId": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "目标子项目 ID。必须引用 project.json 的 bases[].baseId。每个 task 只能落到一个项目内子项目。"
+        },
+        "dependsOn": {
+          "type": "array",
+          "description": "前置任务 ID。依赖未完成时，该任务保持 pending。",
+          "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" }
+        },
+        "requiredSkillId": { "type": "string", "minLength": 1, "description": "primary skill ID。每个 task 只允许一个 primary skill。" },
+        "scope": {
+          "type": "object",
+          "required": ["summary", "inScope", "outOfScope"],
+          "additionalProperties": false,
+          "description": "任务范围。用于限制 agent 不要越界开发。",
+          "properties": {
+            "summary": { "type": "string", "minLength": 1, "description": "任务范围摘要。" },
+            "inScope": { "type": "array", "description": "本任务允许完成的事项。", "items": { "type": "string" } },
+            "outOfScope": { "type": "array", "description": "本任务明确不做的事项。", "items": { "type": "string" } }
+          }
+        },
+        "allowedPaths": {
+          "type": "array",
+          "minItems": 1,
+          "description": "允许修改的路径模式。是否强制限制由 orchestrator 策略决定。",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "expectedChangedFiles": {
+          "type": "array",
+          "description": "预期会改动的文件。用于 review 参考，不一定穷尽。",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "acceptanceCriteria": {
+          "type": "array",
+          "minItems": 1,
+          "description": "任务级验收标准。",
+          "items": { "$ref": "#/$defs/criterion" }
+        },
+        "checks": {
+          "type": "array",
+          "description": "任务级检查。checks 失败时任务标记为 checks_failed。",
+          "items": { "$ref": "#/$defs/check" }
+        },
+        "contextBudget": {
+          "type": "object",
+          "required": ["size", "maxFiles", "maxEstimatedMinutes"],
+          "additionalProperties": false,
+          "description": "上下文预算。用于约束 task 粒度。",
+          "properties": {
+            "size": { "type": "string", "enum": ["xs", "s", "m", "l"], "description": "任务尺寸。建议自动执行优先使用 xs/s/m。" },
+            "maxFiles": { "type": "integer", "minimum": 1, "description": "建议最大改动文件数。" },
+            "maxEstimatedMinutes": { "type": "integer", "minimum": 5, "description": "预估最大执行分钟数。" }
+          }
+        },
+        "retryPolicy": {
+          "type": "object",
+          "required": ["maxAttempts"],
+          "additionalProperties": false,
+          "description": "自动重试策略。超过次数后建议标记 needs_human。",
+          "properties": {
+            "maxAttempts": { "type": "integer", "minimum": 1, "description": "最大自动尝试次数。" }
+          }
+        },
+        "lastIssue": { "$ref": "#/$defs/lastIssue" },
+        "humanNotes": { "type": "string", "description": "人工补充说明。", "default": "" }
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "required": ["id", "text", "verification"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "验收标准 ID。" },
+        "text": { "type": "string", "minLength": 1, "description": "验收标准描述。" },
+        "verification": { "type": "string", "minLength": 1, "description": "如何验证该标准。" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "required": ["id", "name", "type", "command", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "检查 ID。" },
+        "name": { "type": "string", "description": "检查名称。" },
+        "type": { "type": "string", "enum": ["build", "lint", "typecheck", "unit", "api", "e2e", "health", "command"], "description": "检查类型。" },
+        "baseId": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+            { "type": "null" }
+          ],
+          "description": "检查所属项目内子项目 ID。跨端检查可为空。"
+        },
+        "command": { "type": "string", "description": "检查命令。" },
+        "required": { "type": "boolean", "description": "是否必须通过。" }
+      }
+    },
+    "lastIssue": {
+      "type": "object",
+      "required": ["type", "summary", "source", "createdAt"],
+      "additionalProperties": false,
+      "description": "最近一次异常摘要。用于循环结束后的异常清单。",
+      "properties": {
+        "type": { "type": "string", "description": "异常类型，例如 acceptance_mismatch、scope_change_required、check_error。" },
+        "summary": { "type": "string", "description": "异常摘要。" },
+        "source": { "type": "string", "enum": ["executor", "check", "reviewer", "orchestrator"], "description": "异常来源。" },
+        "requiredDecision": { "type": "string", "description": "需要人工决策时填写。", "default": "" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "异常创建时间。" }
+      }
+    },
+    "humanApproval": {
+      "type": "object",
+      "required": ["approved", "approvedBy", "approvedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "approved": { "type": "boolean", "description": "是否已人工确认。" },
+        "approvedBy": { "type": ["string", "null"], "description": "确认人。" },
+        "approvedAt": { "type": ["string", "null"], "format": "date-time", "description": "确认时间。" },
+        "notes": { "type": "string", "description": "确认备注。", "default": "" }
+      }
+    }
+  }
+}

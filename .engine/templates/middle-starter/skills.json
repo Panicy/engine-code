@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "0.1.0",
+  "registryId": "middle-starter",
+  "skills": [
+    {
+      "id": "vben-api-client",
+      "templateId": "middle-starter",
+      "name": "Vben API 封装",
+      "description": "在 apps/web-antd/src/api 下新增或调整接口调用。",
+      "appliesTo": {
+        "taskTypes": ["middle", "integration", "fix"],
+        "paths": ["apps/web-antd/src/api/**"]
+      },
+      "inputsRequired": ["backend-api.json", "permission-manifest.json", "api-connectivity.md", "existing api module examples", "task acceptance criteria"],
+      "workflow": [
+        { "step": 1, "instruction": "确认后端路径、HTTP 方法、请求参数和返回类型。" },
+        { "step": 2, "instruction": "在对应业务域下创建 index.ts 和 model.d.ts。" },
+        { "step": 3, "instruction": "使用 alovaInstance 封装 list/detail/add/update/remove/export 等函数。" },
+        { "step": 4, "instruction": "确认后端正确路径不 404，未登录访问有 401/403 鉴权边界。" },
+        { "step": 5, "instruction": "同步页面调用方并运行 typecheck。" }
+      ],
+      "qualityGates": [
+        { "name": "类型", "expectation": "接口入参和返回值有明确 TypeScript 类型。" },
+        { "name": "封装", "expectation": "页面不直接拼接请求 URL。" },
+        { "name": "契约", "expectation": "API 封装必须与 backend-api.json 一致。" }
+      ],
+      "promptAddendum": "详细手册见 skills/vben-api-client.md。"
+    },
+    {
+      "id": "vben-table-form-page",
+      "templateId": "middle-starter",
+      "name": "Vben 表格表单页面",
+      "description": "新增管理后台列表、查询、弹窗表单和 CRUD 操作页面。",
+      "appliesTo": {
+        "taskTypes": ["middle"],
+        "paths": ["apps/web-antd/src/views/**", "apps/web-antd/src/api/**"]
+      },
+      "inputsRequired": ["task plan", "api client", "permission-manifest.json", "backend-api.json", "existing system/config page"],
+      "workflow": [
+        { "step": 1, "instruction": "确定页面目录、API 模块、字段和权限按钮。" },
+        { "step": 2, "instruction": "创建 index.vue、data.ts、modal 组件。" },
+        { "step": 3, "instruction": "用 useVbenVxeGrid 实现列表、查询、分页和操作列。" },
+        { "step": 4, "instruction": "用 useVbenModal 实现新增和编辑。" },
+        { "step": 5, "instruction": "检查按钮 v-access:code 与 permission-manifest.json 一致。" },
+        { "step": 6, "instruction": "运行 typecheck 并记录检查结果。" }
+      ],
+      "qualityGates": [
+        { "name": "权限", "expectation": "新增、编辑、删除、导出按钮使用 v-access:code。" },
+        { "name": "布局", "expectation": "页面放在 Page 内，不创建营销式布局。" },
+        { "name": "联通", "expectation": "页面列表请求路径不应 404；无权限场景不应吞掉 401/403。" }
+      ],
+      "promptAddendum": "详细手册见 skills/vben-table-form-page.md。"
+    },
+    {
+      "id": "vben-permission-route",
+      "templateId": "middle-starter",
+      "name": "Vben 路由与权限",
+      "description": "新增业务路由、菜单元信息和按钮权限接入。",
+      "appliesTo": {
+        "taskTypes": ["middle", "integration"],
+        "paths": ["apps/web-antd/src/router/**", "apps/web-antd/src/views/**", "apps/web-antd/src/locales/**"]
+      },
+      "inputsRequired": ["route path", "menu title", "permission-manifest.json", "page component path", "project route strategy"],
+      "workflow": [
+        { "step": 1, "instruction": "确认路由路径、组件路径、菜单标题、图标和权限。" },
+        { "step": 2, "instruction": "如果后端菜单驱动路由，不要重复硬编码业务路由。" },
+        { "step": 3, "instruction": "如果静态路由驱动，在 router/routes/modules 中新增或扩展业务路由。" },
+        { "step": 4, "instruction": "配置 meta.title、icon、authority 或后端动态菜单所需信息。" },
+        { "step": 5, "instruction": "同步页面按钮的 v-access:code。" }
+      ],
+      "qualityGates": [
+        { "name": "路由位置", "expectation": "业务路由不放入 _core。" },
+        { "name": "权限一致", "expectation": "路由/按钮权限与后端 @SaCheckPermission 和菜单 SQL 一致。" }
+      ],
+      "promptAddendum": "详细手册见 skills/vben-permission-route.md。"
+    }
+  ]
+}

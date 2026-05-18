@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "0.1.0",
+  "projectId": "demo-project",
+  "name": "示例项目",
+  "description": "用于演示多基座项目配置。",
+  "status": "active",
+  "bases": [
+    {
+      "baseId": "backend",
+      "templateId": "backend-starter",
+      "repo": "https://gitee.com/company/demo-backend",
+      "workspace": "projects/demo-project/backend",
+      "branch": "main",
+      "overrides": {
+        "allowedPaths": [],
+        "devCommands": [],
+        "checks": []
+      }
+    },
+    {
+      "baseId": "middle",
+      "templateId": "middle-starter",
+      "repo": "https://gitee.com/company/demo-middle",
+      "workspace": "projects/demo-project/middle",
+      "branch": "main",
+      "overrides": {
+        "allowedPaths": [],
+        "devCommands": [],
+        "checks": []
+      }
+    },
+    {
+      "baseId": "client",
+      "templateId": "uniapp-template",
+      "repo": "https://gitee.com/company/demo-client",
+      "workspace": "projects/demo-project/client",
+      "branch": "main",
+      "overrides": {
+        "allowedPaths": [],
+        "devCommands": [],
+        "checks": []
+      }
+    }
+  ]
+}

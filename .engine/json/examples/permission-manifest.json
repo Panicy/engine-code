@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "0.1.0",
+  "featureId": "user-tags",
+  "generatedAt": "2026-05-18T11:00:00+08:00",
+  "permissions": [
+    {
+      "code": "biz:userTag:list",
+      "action": "list",
+      "backendAnnotation": true,
+      "menuSql": true,
+      "middleButton": true,
+      "notes": "用户标签列表权限。"
+    },
+    {
+      "code": "biz:userTag:add",
+      "action": "add",
+      "backendAnnotation": true,
+      "menuSql": true,
+      "middleButton": true,
+      "notes": "用户标签新增权限。"
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "0.1.0",
+  "runId": "RUN-20260518-001",
+  "taskId": "US-001-BE-001",
+  "attempts": [
+    {
+      "attempt": 1,
+      "status": "failed",
+      "agent": "backend-agent",
+      "startedAt": "2026-05-18T10:00:00+08:00",
+      "finishedAt": "2026-05-18T10:20:00+08:00",
+      "promptInputs": {
+        "prd": "features/FEAT-user-management/prd.json",
+        "taskPlan": "features/FEAT-user-management/task-plan.json",
+        "skill": ".engine/templates/backend-starter/skills/ruoyi-module-crud.md"
+      },
+      "changedFiles": [
+        "backend/ruoyi-modules/ruoyi-system/src/main/java/org/dromara/system/controller/UserProfileController.java"
+      ],
+      "checks": [
+        {
+          "name": "api-connectivity",
+          "status": "failed",
+          "detail": "GET /system/user-profile returned 404."
+        }
+      ],
+      "lastIssue": "接口路径未注册或网关路由未刷新。",
+      "summary": "后端代码已生成，但接口连通性未通过。",
+      "nextActions": [
+        "检查 Controller RequestMapping 和网关上下文路径。",
+        "修复后重新运行当前 task。"
+      ]
+    },
+    {
+      "attempt": 2,
+      "status": "passed",
+      "agent": "backend-agent",
+      "startedAt": "2026-05-18T10:30:00+08:00",
+      "finishedAt": "2026-05-18T10:42:00+08:00",
+      "promptInputs": {
+        "prd": "features/FEAT-user-management/prd.json",
+        "taskPlan": "features/FEAT-user-management/task-plan.json",
+        "skill": ".engine/templates/backend-starter/skills/ruoyi-module-crud.md"
+      },
+      "changedFiles": [
+        "backend/ruoyi-modules/ruoyi-system/src/main/java/org/dromara/system/controller/UserProfileController.java"
+      ],
+      "checks": [
+        {
+          "name": "api-connectivity",
+          "status": "passed",
+          "detail": "401、404、关闭鉴权后的 200 均符合预期。"
+        }
+      ],
+      "summary": "后端接口连通性已通过。"
+    }
+  ]
+}

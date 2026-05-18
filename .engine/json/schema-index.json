@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "0.1.0",
+  "module": "json-contracts",
+  "description": "AI 开发引擎 JSON 契约索引。",
+  "schemas": [
+    {
+      "id": "workspace",
+      "path": "schemas/workspace.schema.json",
+      "description": "工作区索引，登记模板和项目。"
+    },
+    {
+      "id": "template",
+      "path": "schemas/template.schema.json",
+      "description": "子项目模板配置。"
+    },
+    {
+      "id": "project",
+      "path": "schemas/project.schema.json",
+      "description": "业务项目配置，实例化子项目并引用模板。"
+    },
+    {
+      "id": "prd",
+      "path": "schemas/prd.schema.json",
+      "description": "产品需求文档。"
+    },
+    {
+      "id": "task-plan",
+      "path": "schemas/task-plan.schema.json",
+      "description": "按用户故事组织的任务拆分。"
+    },
+    {
+      "id": "skills",
+      "path": "schemas/skills.schema.json",
+      "description": "模板或项目级 skill 注册表。"
+    },
+    {
+      "id": "run-state",
+      "path": "schemas/run-state.schema.json",
+      "description": "功能运行状态。"
+    },
+    {
+      "id": "task-run",
+      "path": "schemas/task-run.schema.json",
+      "description": "单任务执行尝试记录。"
+    },
+    {
+      "id": "review",
+      "path": "schemas/review.schema.json",
+      "description": "任务 review 结果。"
+    },
+    {
+      "id": "loop-summary",
+      "path": "schemas/loop-summary.schema.json",
+      "description": "单轮循环汇总。"
+    },
+    {
+      "id": "backend-api",
+      "path": "schemas/backend-api.schema.json",
+      "description": "后端接口契约。"
+    },
+    {
+      "id": "permission-manifest",
+      "path": "schemas/permission-manifest.schema.json",
+      "description": "权限链路清单。"
+    },
+    {
+      "id": "database-changes",
+      "path": "schemas/database-changes.schema.json",
+      "description": "数据库变更清单。"
+    }
+  ]
+}

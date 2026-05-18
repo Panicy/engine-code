@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "0.1.0",
+  "prdId": "PRD-DEMO",
+  "status": "draft",
+  "createdAt": "2026-05-18T10:00:00+08:00",
+  "updatedAt": "2026-05-18T10:00:00+08:00",
+  "feature": {
+    "id": "user-tags",
+    "name": "用户标签",
+    "summary": "支持管理员维护用户标签，并在业务端展示标签信息。",
+    "branchName": "feature/user-tags"
+  },
+  "impactedBaseIds": ["backend", "middle", "client"],
+  "goals": [
+    {
+      "id": "G-001",
+      "text": "管理员可以维护用户标签。"
+    }
+  ],
+  "nonGoals": [
+    {
+      "id": "NG-001",
+      "text": "不实现自动标签推荐算法。"
+    }
+  ],
+  "personas": [
+    {
+      "id": "admin",
+      "name": "管理员",
+      "description": "负责维护系统配置和业务基础数据。"
+    }
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "管理员维护用户标签",
+      "story": "作为管理员，我希望新增、编辑、删除和查询用户标签，以便对用户进行分类管理。",
+      "acceptanceCriteria": [
+        {
+          "id": "AC-001",
+          "text": "管理员可以完成用户标签 CRUD。",
+          "verification": "通过后端接口和中台页面验证。"
+        }
+      ],
+      "priority": "must",
+      "dependencies": []
+    }
+  ],
+  "constraints": {
+    "techStack": ["backend-starter", "middle-starter", "uniapp-template"],
+    "architecture": ["后端、中台、客户端分任务实现。"],
+    "security": ["受保护接口必须保留鉴权和权限码。"],
+    "ux": ["中台页面遵循现有 Vben 表格表单模式。"],
+    "performance": [],
+    "quality": ["新增接口需要验证 401/403/404。"]
+  },
+  "risks": [],
+  "humanApproval": {
+    "approved": false,
+    "approvedBy": null,
+    "approvedAt": null,
+    "notes": ""
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "0.1.0",
+  "featureId": "user-tags",
+  "generatedAt": "2026-05-18T11:00:00+08:00",
+  "changes": [
+    {
+      "type": "create_table",
+      "table": "biz_user_tag",
+      "reason": "支持用户标签管理。",
+      "columns": [
+        {
+          "name": "tag_id",
+          "type": "bigint(20)",
+          "nullable": false,
+          "default": "",
+          "comment": "标签ID"
+        },
+        {
+          "name": "tag_name",
+          "type": "varchar(64)",
+          "nullable": false,
+          "default": "",
+          "comment": "标签名称"
+        }
+      ],
+      "indexes": ["primary key (tag_id)", "unique key uk_biz_user_tag_name (tag_name)"],
+      "relatedTasks": ["TASK-001"],
+      "rollbackNotes": "删除业务表前需确认无生产数据。"
+    }
+  ]
+}

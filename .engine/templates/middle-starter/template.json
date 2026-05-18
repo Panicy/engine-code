@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "0.1.0",
+  "templateId": "middle-starter",
+  "name": "Vben 中台基座模板",
+  "type": "middle",
+  "sourceRepo": "https://gitee.com/Panicy/middle-starter",
+  "defaultBranch": "master",
+  "workspaceDefaults": {
+    "installCommands": ["pnpm install"],
+    "devCommands": ["pnpm dev:antd"],
+    "healthChecks": [
+      {
+        "id": "middle-health",
+        "type": "http",
+        "target": "http://127.0.0.1:5666/"
+      },
+      {
+        "id": "middle-health-script",
+        "type": "command",
+        "target": "bash script/bin/middle-health-check.sh"
+      }
+    ]
+  },
+  "pathPolicy": {
+    "defaultAllowedPaths": [
+      "apps/web-antd/src/api/**",
+      "apps/web-antd/src/views/**",
+      "apps/web-antd/src/router/**",
+      "apps/web-antd/src/locales/**",
+      "apps/web-antd/src/components/**",
+      "packages/**"
+    ]
+  },
+  "defaultChecks": [
+    {
+      "id": "middle-typecheck",
+      "name": "中台类型检查",
+      "type": "typecheck",
+      "command": "pnpm -F @vben/web-antd run typecheck",
+      "required": true
+    }
+  ]
+}

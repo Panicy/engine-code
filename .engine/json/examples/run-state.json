@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "0.1.0",
+  "runId": "RUN-DEMO",
+  "prdId": "PRD-DEMO",
+  "planId": "PLAN-DEMO",
+  "status": "not_started",
+  "currentTaskId": null,
+  "startedAt": null,
+  "updatedAt": null,
+  "taskStatuses": {
+    "TASK-001": "draft",
+    "TASK-002": "draft"
+  },
+  "completedTasks": [],
+  "artifacts": [],
+  "decisions": []
+}

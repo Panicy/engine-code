@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/permission-manifest.schema.json",
+  "title": "Permission Manifest",
+  "description": "权限链路清单。用于检查 sys_menu.perms、@SaCheckPermission、v-access:code 是否一致。",
+  "type": "object",
+  "required": ["schemaVersion", "featureId", "generatedAt", "permissions"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "featureId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "action", "backendAnnotation", "menuSql", "middleButton"],
+        "additionalProperties": false,
+        "properties": {
+          "code": { "type": "string" },
+          "action": { "type": "string", "enum": ["list", "query", "add", "edit", "remove", "export", "import", "custom"] },
+          "backendAnnotation": { "type": "boolean" },
+          "menuSql": { "type": "boolean" },
+          "middleButton": { "type": "boolean" },
+          "notes": { "type": "string", "default": "" }
+        }
+      }
+    }
+  }
+}

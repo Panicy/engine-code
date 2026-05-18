@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "0.1.0",
+  "featureId": "user-tags",
+  "generatedAt": "2026-05-18T11:00:00+08:00",
+  "endpoints": [
+    {
+      "id": "user-tag-list",
+      "method": "GET",
+      "path": "/biz/user-tag/list",
+      "description": "分页查询用户标签。",
+      "permissionCode": "biz:userTag:list",
+      "authRequired": true,
+      "request": {
+        "query": [
+          {
+            "name": "pageNum",
+            "type": "number",
+            "required": true,
+            "description": "页码。"
+          },
+          {
+            "name": "pageSize",
+            "type": "number",
+            "required": true,
+            "description": "每页数量。"
+          }
+        ],
+        "path": [],
+        "bodyType": ""
+      },
+      "response": {
+        "wrapper": "TableDataInfo",
+        "dataType": "UserTagVo"
+      }
+    }
+  ]
+}

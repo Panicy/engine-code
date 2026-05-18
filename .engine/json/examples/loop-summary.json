@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "0.1.0",
+  "runId": "RUN-DEMO",
+  "planId": "PLAN-DEMO",
+  "startedAt": "2026-05-18T11:00:00+08:00",
+  "finishedAt": "2026-05-18T11:30:00+08:00",
+  "status": "has_exceptions",
+  "taskSummary": {
+    "done": ["TASK-001"],
+    "pending": ["TASK-002"],
+    "checksFailed": [],
+    "reviewFailed": [],
+    "needsHuman": [],
+    "cancelled": []
+  },
+  "issues": [],
+  "nextRunnableTaskIds": []
+}

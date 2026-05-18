@@ -1,0 +1,110 @@
+{
+  "schemaVersion": "0.1.0",
+  "planId": "PLAN-DEMO",
+  "prdId": "PRD-DEMO",
+  "status": "draft",
+  "createdAt": "2026-05-18T10:15:00+08:00",
+  "updatedAt": "2026-05-18T10:15:00+08:00",
+  "storyGroups": [
+    {
+      "storyId": "US-001",
+      "title": "管理员维护用户标签",
+      "tasks": [
+        {
+          "id": "TASK-001",
+          "title": "新增用户标签后端表结构和接口",
+          "type": "backend",
+          "status": "draft",
+          "sourceStoryIds": ["US-001"],
+          "targetBaseId": "backend",
+          "dependsOn": [],
+          "requiredSkillId": "ruoyi-module-crud",
+          "scope": {
+            "summary": "新增用户标签表、CRUD 接口和菜单权限。",
+            "inScope": ["业务表 SQL", "后端 CRUD", "菜单权限 SQL", "接口连通性自查"],
+            "outOfScope": ["中台页面", "客户端页面"]
+          },
+          "allowedPaths": ["ruoyi-modules/**", "script/sql/**"],
+          "expectedChangedFiles": [],
+          "acceptanceCriteria": [
+            {
+              "id": "AC-001",
+              "text": "后端提供用户标签 CRUD 接口。",
+              "verification": "编译通过，并验证接口正确路径、401/403 和 404。"
+            }
+          ],
+          "checks": [
+            {
+              "id": "backend-compile",
+              "name": "后端编译",
+              "type": "build",
+              "baseId": "backend",
+              "command": "mvn -pl ruoyi-admin -am test -DskipTests",
+              "required": true
+            }
+          ],
+          "contextBudget": {
+            "size": "m",
+            "maxFiles": 16,
+            "maxEstimatedMinutes": 60
+          },
+          "retryPolicy": {
+            "maxAttempts": 3
+          },
+          "humanNotes": ""
+        },
+        {
+          "id": "TASK-002",
+          "title": "新增用户标签中台 API 和页面",
+          "type": "middle",
+          "status": "draft",
+          "sourceStoryIds": ["US-001"],
+          "targetBaseId": "middle",
+          "dependsOn": ["TASK-001"],
+          "requiredSkillId": "vben-table-form-page",
+          "scope": {
+            "summary": "新增用户标签中台管理页面。",
+            "inScope": ["API 封装", "列表页", "弹窗表单", "权限按钮"],
+            "outOfScope": ["后端接口", "客户端页面"]
+          },
+          "allowedPaths": ["apps/web-antd/src/api/**", "apps/web-antd/src/views/**"],
+          "expectedChangedFiles": [],
+          "acceptanceCriteria": [
+            {
+              "id": "AC-001",
+              "text": "管理员可以在中台维护用户标签。",
+              "verification": "typecheck 通过，页面操作调用正确 API。"
+            }
+          ],
+          "checks": [
+            {
+              "id": "middle-typecheck",
+              "name": "中台类型检查",
+              "type": "typecheck",
+              "baseId": "middle",
+              "command": "pnpm -F @vben/web-antd run typecheck",
+              "required": true
+            }
+          ],
+          "contextBudget": {
+            "size": "m",
+            "maxFiles": 12,
+            "maxEstimatedMinutes": 60
+          },
+          "retryPolicy": {
+            "maxAttempts": 3
+          },
+          "humanNotes": ""
+        }
+      ],
+      "acceptanceChecks": []
+    }
+  ],
+  "regressionChecks": [],
+  "humanApproval": {
+    "approved": false,
+    "approvedBy": null,
+    "approvedAt": null,
+    "notes": ""
+  }
+}

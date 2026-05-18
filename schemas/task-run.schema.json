@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/task-run.schema.json",
+  "title": "Task Run",
+  "description": "单个 task 的执行尝试记录。用于 fresh context 下恢复上下文和审计每次自动执行。",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "taskId", "attempts"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "runId": { "type": "string", "pattern": "^RUN-[A-Z0-9][A-Z0-9-]*$" },
+    "taskId": { "type": "string", "pattern": "^TASK-[0-9]{3}$" },
+    "attempts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["attempt", "status", "agent", "startedAt", "promptInputs", "changedFiles", "checks", "summary"],
+        "additionalProperties": false,
+        "properties": {
+          "attempt": { "type": "integer", "minimum": 1 },
+          "status": { "type": "string", "enum": ["started", "failed", "checks_failed", "review_failed", "needs_human", "passed"], "description": "本次尝试状态。" },
+          "agent": {
+            "type": "object",
+            "required": ["tool", "model"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": { "type": "string" },
+              "model": { "type": "string" }
+            }
+          },
+          "startedAt": { "type": "string", "format": "date-time" },
+          "finishedAt": { "type": ["string", "null"], "format": "date-time" },
+          "promptInputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type", "path"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "type": "string", "enum": ["prd", "taskPlan", "task", "skill", "runState", "previousAttempt", "notes"] },
+                "path": { "type": "string" }
+              }
+            }
+          },
+          "changedFiles": { "type": "array", "items": { "type": "string" } },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "command", "status"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "command": { "type": "string" },
+                "status": { "type": "string", "enum": ["not_run", "passed", "failed", "skipped"] },
+                "summary": { "type": "string", "default": "" }
+              }
+            }
+          },
+          "lastIssue": {
+            "type": "object",
+            "required": ["type", "summary", "source", "createdAt"],
+            "additionalProperties": false,
+            "description": "本次尝试的最近异常。成功时可省略。",
+            "properties": {
+              "type": { "type": "string" },
+              "summary": { "type": "string" },
+              "source": { "type": "string", "enum": ["executor", "check", "reviewer", "orchestrator"] },
+              "requiredDecision": { "type": "string", "default": "" },
+              "createdAt": { "type": "string", "format": "date-time" }
+            }
+          },
+          "summary": { "type": "string" },
+          "errors": { "type": "array", "items": { "type": "string" }, "default": [] },
+          "nextActions": { "type": "array", "items": { "type": "string" }, "default": [] }
+        }
+      }
+    }
+  }
+}

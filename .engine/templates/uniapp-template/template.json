@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "0.1.0",
+  "templateId": "uniapp-template",
+  "name": "UniApp 客户端基座模板",
+  "type": "client",
+  "sourceRepo": "https://gitee.com/Panicy/uniapp-template",
+  "defaultBranch": "master",
+  "workspaceDefaults": {
+    "installCommands": [],
+    "devCommands": [],
+    "healthChecks": []
+  },
+  "pathPolicy": {
+    "defaultAllowedPaths": [
+      "api/**",
+      "config/**",
+      "pages/**",
+      "pages-sub/**",
+      "pages-workspace/**",
+      "store/**",
+      "types/**",
+      "utils/**",
+      "tests/**"
+    ]
+  },
+  "defaultChecks": [
+    {
+      "id": "client-tests",
+      "name": "客户端测试",
+      "type": "unit",
+      "command": "npm test",
+      "required": true
+    }
+  ]
+}

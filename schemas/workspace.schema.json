@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/workspace.schema.json",
+  "title": "Workspace",
+  "description": "引擎工作区索引。只负责登记有哪些项目和模板，不承载具体技术栈知识。",
+  "type": "object",
+  "required": ["schemaVersion", "workspaceId", "name", "templates", "projects"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "契约版本。当前固定为 0.1.0。"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "工作区唯一标识。"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "工作区显示名称。"
+    },
+    "templates": {
+      "type": "array",
+      "description": "已注册的子项目模板索引。",
+      "items": {
+        "type": "object",
+        "required": ["templateId", "templatePath", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "templateId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "模板 ID。"
+          },
+          "templatePath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "模板配置文件路径，例如 .engine/templates/backend-starter/template.json。"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "deprecated"],
+            "description": "模板状态。"
+          }
+        }
+      }
+    },
+    "projects": {
+      "type": "array",
+      "description": "业务项目索引。",
+      "items": {
+        "type": "object",
+        "required": ["projectId", "projectPath", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "项目 ID。"
+          },
+          "projectPath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "项目配置文件路径，例如 .engine/projects/demo/project.json。"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "archived"],
+            "description": "项目状态。"
+          }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "工作区默认策略。",
+      "properties": {
+        "maxTaskAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "默认最大 task 自动尝试次数。"
+        }
+      },
+      "default": {}
+    }
+  }
+}

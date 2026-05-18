@@ -1,0 +1,4 @@
+.DS_Store
+
+# 本地参考缓存：用于阅读基座代码，不作为引擎仓库内容提交。
+.engine/source-templates/

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "0.1.0",
+  "templateId": "backend-starter",
+  "name": "RuoYi 后端基座模板",
+  "type": "backend",
+  "sourceRepo": "https://gitee.com/Panicy/backend-starter",
+  "defaultBranch": "master",
+  "workspaceDefaults": {
+    "installCommands": [],
+    "devCommands": [
+      "mvn -pl ruoyi-admin spring-boot:run -Dspring-boot.run.profiles=dev"
+    ],
+    "healthChecks": [
+      {
+        "id": "backend-health",
+        "type": "http",
+        "target": "http://127.0.0.1:8088/actuator/health"
+      },
+      {
+        "id": "backend-health-script",
+        "type": "command",
+        "target": "bash script/bin/backend-health-check.sh"
+      }
+    ]
+  },
+  "pathPolicy": {
+    "defaultAllowedPaths": [
+      "ruoyi-admin/**",
+      "ruoyi-modules/**",
+      "ruoyi-common/**",
+      "script/sql/**"
+    ]
+  },
+  "defaultChecks": [
+    {
+      "id": "backend-compile",
+      "name": "后端编译",
+      "type": "build",
+      "command": "mvn -pl ruoyi-admin -am test -DskipTests",
+      "required": true
+    }
+  ]
+}

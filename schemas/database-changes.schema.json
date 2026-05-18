@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/database-changes.schema.json",
+  "title": "Database Changes",
+  "description": "功能级数据库变更清单。由数据库或后端 task 产出，供 review 和后续 task 使用。",
+  "type": "object",
+  "required": ["schemaVersion", "featureId", "generatedAt", "changes"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "featureId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "table", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "type": { "type": "string", "enum": ["create_table", "alter_table", "create_index", "insert_seed", "insert_menu", "insert_dict"] },
+          "table": { "type": "string" },
+          "reason": { "type": "string" },
+          "columns": { "type": "array", "items": { "$ref": "#/$defs/column" }, "default": [] },
+          "indexes": { "type": "array", "items": { "type": "string" }, "default": [] },
+          "relatedTasks": { "type": "array", "items": { "type": "string", "pattern": "^TASK-[0-9]{3}$" }, "default": [] },
+          "rollbackNotes": { "type": "string", "default": "" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "column": {
+      "type": "object",
+      "required": ["name", "type", "nullable"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "nullable": { "type": "boolean" },
+        "default": { "type": "string", "default": "" },
+        "comment": { "type": "string", "default": "" }
+      }
+    }
+  }
+}

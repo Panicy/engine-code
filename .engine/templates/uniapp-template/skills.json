@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "0.1.0",
+  "registryId": "uniapp-template",
+  "skills": [
+    {
+      "id": "uniapp-api-client",
+      "templateId": "uniapp-template",
+      "name": "UniApp API 封装",
+      "description": "在 api/ 和 config/endpoints.js 中新增或调整客户端接口。",
+      "appliesTo": {
+        "taskTypes": ["client", "integration", "fix"],
+        "paths": ["api/**", "config/**", "utils/**"]
+      },
+      "inputsRequired": ["backend-api.json", "api-connectivity.md", "config/endpoints.js", "utils/request.js"],
+      "workflow": [
+        { "step": 1, "instruction": "确认接口路径、方法、参数和响应数据。" },
+        { "step": 2, "instruction": "在 config/endpoints.js 添加路径常量。" },
+        { "step": 3, "instruction": "在 api/<domain>.js 封装 get/post 调用。" },
+        { "step": 4, "instruction": "确认正确路径不 404，受保护接口未登录有 401/403 边界。" },
+        { "step": 5, "instruction": "页面和 store 只调用 api 函数。" }
+      ],
+      "qualityGates": [
+        { "name": "统一请求", "expectation": "不在页面中直接调用 uni.request。" },
+        { "name": "路径集中", "expectation": "接口路径不散落在页面或 store 中。" },
+        { "name": "鉴权", "expectation": "401/403 按登录态约定处理，不残留错误权限状态。" }
+      ],
+      "promptAddendum": "详细手册见 skills/uniapp-api-client.md。"
+    },
+    {
+      "id": "uniapp-page-flow",
+      "templateId": "uniapp-template",
+      "name": "UniApp 页面流程",
+      "description": "新增页面、分包页面、列表详情表单等客户端流程。",
+      "appliesTo": {
+        "taskTypes": ["client"],
+        "paths": ["pages/**", "pages-sub/**", "pages-workspace/**", "config/**", "api/**", "store/**"]
+      },
+      "inputsRequired": ["pages.json", "routes config", "api functions", "store state", "backend-api.json when remote data is needed"],
+      "workflow": [
+        { "step": 1, "instruction": "确认页面归属 pages、pages-sub 或 pages-workspace。" },
+        { "step": 2, "instruction": "新增页面组件并在 pages.json 或路由配置中登记。" },
+        { "step": 3, "instruction": "页面通过 api 和 store 获取数据，不直接访问后端。" },
+        { "step": 4, "instruction": "使用 onLoad 初始化参数，使用 onShow 处理可见态刷新。" },
+        { "step": 5, "instruction": "处理 loading、空态、错误态、401/403 和权限边界。" }
+      ],
+      "qualityGates": [
+        { "name": "联调边界", "expectation": "接口路径、响应解析、鉴权头都走统一配置和 request。" },
+        { "name": "状态", "expectation": "跨页面状态进入 Pinia store。" },
+        { "name": "平台", "expectation": "不要把 H5 特有 API 当作小程序/App 通用能力。" }
+      ],
+      "promptAddendum": "详细手册见 skills/uniapp-page-flow.md。"
+    },
+    {
+      "id": "uniapp-store-module",
+      "templateId": "uniapp-template",
+      "name": "UniApp Store 模块",
+      "description": "新增或调整 Pinia 状态模块和持久化缓存。",
+      "appliesTo": {
+        "taskTypes": ["client", "refactor"],
+        "paths": ["store/**", "utils/cache.js", "api/**"]
+      },
+      "inputsRequired": ["state requirements", "existing store examples", "cache policy", "auth/permission lifecycle"],
+      "workflow": [
+        { "step": 1, "instruction": "确认状态是否跨页面共享。" },
+        { "step": 2, "instruction": "在 store 中定义 state、getters、actions。" },
+        { "step": 3, "instruction": "需要持久化时使用 utils/cache.js。" },
+        { "step": 4, "instruction": "导出便捷函数供非组件代码使用。" },
+        { "step": 5, "instruction": "明确退出登录、401/403、角色变化、工作区切换时的清理策略。" }
+      ],
+      "qualityGates": [
+        { "name": "单一来源", "expectation": "同一业务状态不在多个页面重复维护。" },
+        { "name": "清理", "expectation": "退出登录或权限变化时清理相关缓存。" }
+      ],
+      "promptAddendum": "详细手册见 skills/uniapp-store-module.md。"
+    }
+  ]
+}

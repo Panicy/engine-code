@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "0.1.0",
+  "runId": "RUN-20260518-001",
+  "taskId": "US-001-BE-001",
+  "verdict": "pass",
+  "reviewedAt": "2026-05-18T10:50:00+08:00",
+  "criteriaResults": [
+    {
+      "criterionId": "api-connectivity",
+      "status": "pass",
+      "evidence": [
+        "未登录访问返回 401。",
+        "不存在接口返回 404。",
+        "关闭鉴权后业务接口返回 200。"
+      ]
+    },
+    {
+      "criterionId": "permission-chain",
+      "status": "pass",
+      "evidence": [
+        "菜单、权限标识、Controller 注解已对齐。"
+      ]
+    }
+  ],
+  "requiredFixes": [],
+  "notes": [
+    "review 只记录结论和证据，不直接阻塞其他可运行任务。"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/backend-api.schema.json",
+  "title": "Backend API Contract",
+  "description": "后端接口契约。由后端 task 产出，供中台和客户端 task 消费。",
+  "type": "object",
+  "required": ["schemaVersion", "featureId", "generatedAt", "endpoints"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "featureId": { "type": "string", "minLength": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "method", "path", "description", "authRequired", "response"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+          "path": { "type": "string" },
+          "description": { "type": "string" },
+          "permissionCode": { "type": "string", "default": "" },
+          "authRequired": { "type": "boolean" },
+          "request": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "query": { "type": "array", "items": { "$ref": "#/$defs/field" }, "default": [] },
+              "path": { "type": "array", "items": { "$ref": "#/$defs/field" }, "default": [] },
+              "bodyType": { "type": "string", "default": "" }
+            },
+            "default": {}
+          },
+          "response": {
+            "type": "object",
+            "required": ["wrapper", "dataType"],
+            "additionalProperties": false,
+            "properties": {
+              "wrapper": { "type": "string", "enum": ["R", "TableDataInfo", "void", "file"] },
+              "dataType": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "required": ["name", "type", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "required": { "type": "boolean" },
+        "description": { "type": "string", "default": "" }
+      }
+    }
+  }
+}

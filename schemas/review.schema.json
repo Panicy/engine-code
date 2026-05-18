@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/review.schema.json",
+  "title": "Task Review",
+  "type": "object",
+  "required": ["schemaVersion", "runId", "taskId", "verdict", "reviewedAt", "criteriaResults", "requiredFixes"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "0.1.0" },
+    "runId": { "type": "string", "pattern": "^RUN-[A-Z0-9][A-Z0-9-]*$" },
+    "taskId": { "type": "string", "pattern": "^TASK-[0-9]{3}$" },
+    "verdict": { "type": "string", "enum": ["pass", "fail", "needs_human"] },
+    "reviewedAt": { "type": "string", "format": "date-time" },
+    "criteriaResults": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["criterionId", "status", "evidence"],
+        "additionalProperties": false,
+        "properties": {
+          "criterionId": { "type": "string" },
+          "status": { "type": "string", "enum": ["pass", "fail", "unclear"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "scopeFindings": { "type": "array", "items": { "$ref": "#/$defs/finding" }, "default": [] },
+    "architectureFindings": { "type": "array", "items": { "$ref": "#/$defs/finding" }, "default": [] },
+    "testFindings": { "type": "array", "items": { "$ref": "#/$defs/finding" }, "default": [] },
+    "requiredFixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "suggestedFollowUpTasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["title", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      },
+      "default": []
+    },
+    "summary": { "type": "string", "default": "" }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["severity", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "severity": { "type": "string", "enum": ["low", "medium", "high"] },
+        "description": { "type": "string" },
+        "file": { "type": ["string", "null"] },
+        "line": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    }
+  }
+}

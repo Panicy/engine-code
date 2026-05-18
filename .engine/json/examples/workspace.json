@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "0.1.0",
+  "workspaceId": "demo-workspace",
+  "name": "示例工作区",
+  "templates": [
+    {
+      "templateId": "backend-starter",
+      "templatePath": ".engine/templates/backend-starter/template.json",
+      "status": "active"
+    },
+    {
+      "templateId": "middle-starter",
+      "templatePath": ".engine/templates/middle-starter/template.json",
+      "status": "active"
+    },
+    {
+      "templateId": "uniapp-template",
+      "templatePath": ".engine/templates/uniapp-template/template.json",
+      "status": "active"
+    }
+  ],
+  "projects": [
+    {
+      "projectId": "demo-project",
+      "projectPath": ".engine/projects/demo-project/project.json",
+      "status": "active"
+    }
+  ],
+  "defaults": {
+    "maxTaskAttempts": 3
+  }
+}
