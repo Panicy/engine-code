@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateFiles, validateSchema } from '../validator/validate-feature.mjs';
 import { availableAgentAdapters, createAgentAdapter } from '../agent-adapters/index.mjs';
+import { runChecks } from '../checks-runner/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,9 +21,11 @@ function usage() {
     '可选：',
     '  --templates-dir .engine/templates',
     `  --agent-adapter ${availableAgentAdapters().join('|')}`,
+    '  --checks-mode mock|command',
     '  --max-tasks 0',
     '  --mock-fail-task TASK-001',
     '  --mock-fail-stage check|review|human',
+    '  --mock-fail-check CHECK-001',
     '  --owner run-loop',
   ].join('\n');
 }
@@ -240,6 +243,31 @@ function retryAwareStatus(state, desiredStatus) {
   return desiredStatus;
 }
 
+function normalizeOutcomeWithChecks({ outcome, checkResult }) {
+  if (outcome.requestedStatus !== 'done') {
+    return {
+      ...outcome,
+      checks: checkResult.checks,
+    };
+  }
+  if (checkResult.status === 'passed') {
+    return {
+      ...outcome,
+      checks: checkResult.checks,
+    };
+  }
+  return {
+    ...outcome,
+    requestedStatus: 'checks_failed',
+    taskRunStatus: 'checks_failed',
+    reviewVerdict: null,
+    source: 'check',
+    checks: checkResult.checks,
+    summary: `checks failed: ${[...checkResult.failedCheckIds, ...checkResult.manualCheckIds].join(', ')}`,
+    nextActions: ['修复检查失败项后下一轮自动重试。'],
+  };
+}
+
 function artifactPath(featureDir, taskId, fileName) {
   return path.join(featureDir, 'runs', taskId, fileName);
 }
@@ -319,6 +347,10 @@ function runLoop(args) {
   const startedAt = nowIso();
   const templatesDir = args['templates-dir'] ?? '.engine/templates';
   const adapter = createAgentAdapter(args['agent-adapter'] ?? 'mock');
+  const checksMode = args['checks-mode'] ?? 'mock';
+  if (!['mock', 'command'].includes(checksMode)) {
+    throw new Error('--checks-mode 必须是 mock 或 command。');
+  }
   const owner = args.owner ?? 'run-loop';
   const maxTasksRaw = args['max-tasks'] ?? '0';
   const maxTasks = /^\d+$/.test(maxTasksRaw) ? Number.parseInt(maxTasksRaw, 10) : Number.NaN;
@@ -375,12 +407,18 @@ function runLoop(args) {
           startedAt: startedTaskAt,
         });
         validateAdapterOutcome(outcome, adapter.id);
+        const checkResult = runChecks(task, {
+          mode: checksMode,
+          cwd: repoRoot,
+          mockFailCheckId: args['mock-fail-check'] ?? '',
+        });
+        const normalizedOutcome = normalizeOutcomeWithChecks({ outcome, checkResult });
         const finishedTaskAt = nowIso();
-        const desiredStatus = retryAwareStatus(state, outcome.requestedStatus);
+        const desiredStatus = retryAwareStatus(state, normalizedOutcome.requestedStatus);
         const lastIssue = desiredStatus === 'done' ? null : {
           type: desiredStatus === 'needs_human' ? 'needs_human' : `${desiredStatus}_adapter`,
-          summary: outcome.summary || `${adapter.id} adapter marked ${task.id} as ${desiredStatus}`,
-          source: outcome.source ?? 'orchestrator',
+          summary: normalizedOutcome.summary || `${adapter.id} adapter marked ${task.id} as ${desiredStatus}`,
+          source: normalizedOutcome.source ?? 'orchestrator',
           requiredDecision: desiredStatus === 'needs_human' ? '请人工确认后恢复任务。' : '',
           createdAt: finishedTaskAt,
         };
@@ -394,10 +432,10 @@ function runLoop(args) {
           lastIssue,
           args,
           outcome: {
-            ...outcome,
+            ...normalizedOutcome,
             summary: desiredStatus === 'done'
-              ? outcome.summary
-              : outcome.summary || `${adapter.id} adapter marked ${task.id} as ${desiredStatus}`,
+              ? normalizedOutcome.summary
+              : normalizedOutcome.summary || `${adapter.id} adapter marked ${task.id} as ${desiredStatus}`,
           },
         });
         const taskRunPath = artifactPath(featureDir, task.id, 'task-run.json');
@@ -408,8 +446,8 @@ function runLoop(args) {
           runState.artifacts.push({ type: 'taskRun', path: taskRunPath });
         }
 
-        if (outcome.reviewVerdict) {
-          const review = buildReview({ runState, task, verdict: outcome.reviewVerdict, reviewedAt: finishedTaskAt });
+        if (normalizedOutcome.reviewVerdict) {
+          const review = buildReview({ runState, task, verdict: normalizedOutcome.reviewVerdict, reviewedAt: finishedTaskAt });
           const reviewPath = artifactPath(featureDir, task.id, 'review.json');
           schemaValidateArtifact('review', review, reviewPath);
           writeJsonAtomic(reviewPath, review);

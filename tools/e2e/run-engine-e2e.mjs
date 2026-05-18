@@ -224,6 +224,19 @@ function testUnknownAgentAdapter(baseDir) {
   assert(result.stderr.includes('未知 Agent Adapter'), '未知 adapter 应被拒绝');
 }
 
+function testUnknownChecksMode(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'unknown-checks-mode');
+  const result = runNode([
+    'tools/run-loop/run-feature.mjs',
+    '--project', projectPath,
+    '--prd', paths.prd,
+    '--task-plan', paths.taskPlan,
+    '--run-state', paths.runState,
+    '--checks-mode', 'missing',
+  ], { expectFailure: true });
+  assert(result.stderr.includes('--checks-mode 必须是 mock 或 command'), '未知 checks-mode 应被拒绝');
+}
+
 function testMaxTasksPause(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'max-tasks-pause');
   const result = runLoop(paths, ['--max-tasks', '1']);
@@ -243,6 +256,14 @@ function testCheckFailureRetry(baseDir) {
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   assert(taskRun.attempts.length === 2, '失败复跑应保留 2 次 attempts');
   assert(taskRun.attempts.map((item) => item.attempt).join(',') === '1,2', 'attempt 编号应连续');
+}
+
+function testChecksRunnerFailure(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'checks-runner-failure');
+  const result = runLoop(paths, ['--mock-fail-check', 'backend-compile']);
+  assert(result.summary.taskSummary.checksFailed.includes('TASK-001'), 'Checks Runner 失败应让任务进入 checksFailed');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].checks.some((check) => check.id === 'backend-compile' && check.status === 'failed'), '失败 check 应写入 task-run');
 }
 
 function testReviewFailureRetry(baseDir) {
@@ -268,9 +289,11 @@ const tests = [
   ['JSON 契约文件可解析', (_baseDir) => validateJsonFixtures()],
   ['PRD 人工确认门禁', testApprovalGate],
   ['未知 Agent Adapter 拒绝', testUnknownAgentAdapter],
+  ['未知 Checks Mode 拒绝', testUnknownChecksMode],
   ['完整主流程', testHappyPath],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],
+  ['Checks Runner 定点失败', testChecksRunnerFailure],
   ['评审失败复跑入口', testReviewFailureRetry],
   ['needs_human 非阻塞状态', testNeedsHuman],
 ];

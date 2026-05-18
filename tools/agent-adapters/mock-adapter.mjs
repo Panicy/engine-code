@@ -1,10 +1,3 @@
-function checkCommand(check) {
-  if (check.command) return check.command;
-  if (check.http) return `${check.http.method} ${check.http.url} -> ${check.http.expectedStatus}`;
-  if (check.manual) return `manual: ${check.manual.instruction}`;
-  return check.type;
-}
-
 function decideMockOutcome(task, args) {
   if (args['mock-fail-task'] !== task.id) {
     return {
@@ -39,15 +32,6 @@ function decideMockOutcome(task, args) {
   };
 }
 
-function buildChecks(task, taskRunStatus) {
-  return (task.checks ?? []).map((check) => ({
-    id: check.id,
-    command: checkCommand(check),
-    status: taskRunStatus === 'checks_failed' ? 'failed' : 'passed',
-    summary: taskRunStatus === 'checks_failed' ? 'mock check failed' : 'mock check passed',
-  }));
-}
-
 function createMockAdapter() {
   return {
     id: 'mock',
@@ -62,7 +46,7 @@ function createMockAdapter() {
           model: 'mock',
         },
         changedFiles: [],
-        checks: buildChecks(task, outcome.taskRunStatus),
+        checks: [],
         summary: outcome.taskRunStatus === 'passed'
           ? `mock agent completed ${task.id}`
           : `mock agent marked ${task.id} as ${outcome.taskRunStatus}`,

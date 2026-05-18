@@ -1,6 +1,6 @@
 # Run Loop
 
-Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapter 执行 task，默认使用 `mock` adapter 跑通状态流转和运行产物写入，不执行真实代码开发。
+Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapter 执行 task，并通过 Checks Runner 统一检查 task 结果。默认配置仍以 mock 为主，不执行真实代码开发。
 
 ## 当前能力
 
@@ -9,7 +9,9 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapt
 - 推进 `pending -> ready`。
 - 按 task-plan 顺序执行 `ready`、`checks_failed`、`review_failed`。
 - 通过 `--agent-adapter` 选择 task 执行器。
-- 默认 `mock` adapter 会模拟 agent、checks 和 review。
+- 通过 `--checks-mode` 选择检查模式。
+- 默认 `mock` adapter 会模拟 agent 和 review。
+- 默认 `mock` checks 会生成标准化检查结果。
 - 写入：
   - `runs/<taskId>/task-run.json`
   - `runs/<taskId>/review.json`
@@ -35,9 +37,11 @@ node tools/run-loop/run-feature.mjs \
 ```bash
 --templates-dir .engine/templates
 --agent-adapter mock
+--checks-mode mock
 --max-tasks 1
 --mock-fail-task TASK-001
 --mock-fail-stage check
+--mock-fail-check backend-compile
 --owner run-loop
 ```
 
@@ -50,6 +54,16 @@ node tools/run-loop/run-feature.mjs \
 - `mock`：默认执行器，用于验证状态机和异常复跑。
 
 Adapter 只返回单个 task 的执行 outcome，不直接修改 `run-state.json`，也不直接写 `task-run.json` 或 `review.json`。状态流转、重试耗尽、运行锁释放和产物写入仍由 Run Loop 统一处理。
+
+## Checks Runner
+
+当前支持：
+
+- `mock`：默认模式，生成标准化检查结果；可用 `--mock-fail-check <checkId>` 定点模拟失败。
+- `command`：执行带 `command` 字段的检查命令。
+- `manual` 检查不会自动通过；必需 manual 检查会让任务进入 `checks_failed`。
+
+检查失败时，Run Loop 会将任务标记为 `checks_failed`，并把每个 check 的结果写入 `task-run.json`。
 
 ## Mock 失败
 
@@ -69,9 +83,20 @@ node tools/run-loop/run-feature.mjs \
 - `review`：任务进入 `review_failed`
 - `human`：任务进入 `needs_human`
 
+也可以只模拟某个检查失败：
+
+```bash
+node tools/run-loop/run-feature.mjs \
+  --project project.json \
+  --prd prd.json \
+  --task-plan task-plan.json \
+  --run-state run-state.json \
+  --mock-fail-check backend-compile
+```
+
 ## 后续增强
 
 - 接入真实 `codex` 或 `shell` Agent Adapter。
-- 接入真实 Checks Runner。
+- 增强 HTTP Checks Runner，覆盖 401/403、404、auth_disabled setup/teardown。
 - 接入真实 Reviewer。
 - 增加更细粒度的运行锁恢复策略。
