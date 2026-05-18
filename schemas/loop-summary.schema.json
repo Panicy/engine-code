@@ -72,6 +72,28 @@
       },
       "default": []
     },
+    "abnormalTasks": {
+      "type": "array",
+      "description": "异常任务复跑入口。用于 CLI/UI 直接展示失败原因、来源、尝试次数和下一步动作。",
+      "items": {
+        "type": "object",
+        "required": ["taskId", "status", "source", "summary", "attempts", "nextAction"],
+        "additionalProperties": false,
+        "properties": {
+          "taskId": { "type": "string", "pattern": "^TASK-[0-9]{3}$" },
+          "status": { "type": "string", "enum": ["checks_failed", "review_failed", "needs_human", "running"] },
+          "source": { "type": "string", "enum": ["executor", "check", "reviewer", "orchestrator", "validator"] },
+          "summary": { "type": "string" },
+          "attempts": { "type": "integer", "minimum": 0 },
+          "maxAttempts": { "type": "integer", "minimum": 1 },
+          "retryExhausted": { "type": "boolean", "default": false },
+          "requiredDecision": { "type": "string", "default": "" },
+          "nextAction": { "type": "string", "description": "建议下一步。可为自动重跑、人工处理或取消任务。" },
+          "artifactPath": { "type": "string", "default": "" }
+        }
+      },
+      "default": []
+    },
     "nextRunnableTaskIds": {
       "type": "array",
       "description": "下一轮可以继续自动执行的任务，通常来自 checks_failed、review_failed 或新变为 ready 的任务。",

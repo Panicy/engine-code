@@ -7,9 +7,24 @@
   "currentTaskId": null,
   "startedAt": null,
   "updatedAt": null,
-  "taskStatuses": {
-    "TASK-001": "draft",
-    "TASK-002": "draft"
+  "activeRunLock": null,
+  "taskStates": {
+    "TASK-001": {
+      "status": "draft",
+      "attempts": 0,
+      "maxAttempts": 3,
+      "lastRunId": null,
+      "lastIssue": null,
+      "updatedAt": "2026-05-18T10:15:00+08:00"
+    },
+    "TASK-002": {
+      "status": "draft",
+      "attempts": 0,
+      "maxAttempts": 3,
+      "lastRunId": null,
+      "lastIssue": null,
+      "updatedAt": "2026-05-18T10:15:00+08:00"
+    }
   },
   "completedTasks": [],
   "artifacts": [],

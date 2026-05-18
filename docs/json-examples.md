@@ -157,7 +157,6 @@
           "id": "TASK-001",
           "title": "新增用户标签后端接口",
           "type": "backend",
-          "status": "ready",
           "sourceStoryIds": ["US-001"],
           // 引用 project.json 的 bases[].baseId，不直接引用模板 ID
           "targetBaseId": "backend",
@@ -189,6 +188,19 @@
               "baseId": "backend",
               "command": "mvn -pl ruoyi-admin -am test -DskipTests",
               "required": true
+            },
+            {
+              "id": "backend-api-401",
+              "name": "未登录访问返回 401",
+              "type": "http",
+              "baseId": "backend",
+              "http": {
+                "method": "GET",
+                "url": "http://127.0.0.1:8080/system/user-tag/list",
+                "expectedStatus": 401,
+                "authMode": "anonymous"
+              },
+              "required": true
             }
           ],
           "contextBudget": {
@@ -205,7 +217,6 @@
           "id": "TASK-002",
           "title": "新增用户标签中台页面",
           "type": "middle",
-          "status": "pending",
           "sourceStoryIds": ["US-001"],
           "targetBaseId": "middle",
           // 依赖后端接口完成；依赖未满足时保持 pending，不算异常
@@ -298,6 +309,20 @@
       "status": "needs_human",
       "summary": "当前需求需要新增短信服务供应商配置，但 PRD 未确认供应商。",
       "requiredDecision": "确认使用阿里云短信还是腾讯云短信。",
+      "artifactPath": ".engine/projects/crm-system/features/user-tags/runs/TASK-003/review.json"
+    }
+  ],
+  "abnormalTasks": [
+    {
+      "taskId": "TASK-003",
+      "status": "needs_human",
+      "source": "reviewer",
+      "summary": "当前需求需要新增短信服务供应商配置，但 PRD 未确认供应商。",
+      "attempts": 1,
+      "maxAttempts": 3,
+      "retryExhausted": false,
+      "requiredDecision": "确认使用阿里云短信还是腾讯云短信。",
+      "nextAction": "人工确认供应商后，将任务恢复为 ready。",
       "artifactPath": ".engine/projects/crm-system/features/user-tags/runs/TASK-003/review.json"
     }
   ],

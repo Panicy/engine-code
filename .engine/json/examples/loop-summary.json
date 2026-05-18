@@ -14,5 +14,6 @@
     "cancelled": []
   },
   "issues": [],
+  "abnormalTasks": [],
   "nextRunnableTaskIds": []
 }

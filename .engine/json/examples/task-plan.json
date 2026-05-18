@@ -14,7 +14,6 @@
           "id": "TASK-001",
           "title": "新增用户标签后端表结构和接口",
           "type": "backend",
-          "status": "draft",
           "sourceStoryIds": ["US-001"],
           "targetBaseId": "backend",
           "dependsOn": [],
@@ -41,6 +40,19 @@
               "baseId": "backend",
               "command": "mvn -pl ruoyi-admin -am test -DskipTests",
               "required": true
+            },
+            {
+              "id": "backend-api-401",
+              "name": "未登录访问返回 401",
+              "type": "http",
+              "baseId": "backend",
+              "http": {
+                "method": "GET",
+                "url": "http://127.0.0.1:8080/system/user-tag/list",
+                "expectedStatus": 401,
+                "authMode": "anonymous"
+              },
+              "required": true
             }
           ],
           "contextBudget": {
@@ -57,7 +69,6 @@
           "id": "TASK-002",
           "title": "新增用户标签中台 API 和页面",
           "type": "middle",
-          "status": "draft",
           "sourceStoryIds": ["US-001"],
           "targetBaseId": "middle",
           "dependsOn": ["TASK-001"],

@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://engin-code.local/schemas/run-state.schema.json",
   "title": "Run State",
-  "description": "一次功能开发运行的整体状态。只记录当前进度和产物，不做阻塞等待。",
+  "description": "一次功能开发运行的整体状态。task-plan 是人工确认后的静态计划，运行态统一记录在本文件中。",
   "type": "object",
-  "required": ["schemaVersion", "runId", "prdId", "planId", "status", "taskStatuses", "artifacts"],
+  "required": ["schemaVersion", "runId", "prdId", "planId", "status", "taskStates", "artifacts"],
   "additionalProperties": false,
   "properties": {
     "schemaVersion": { "type": "string", "const": "0.1.0", "description": "契约版本。当前固定为 0.1.0。" },
@@ -15,12 +15,25 @@
     "currentTaskId": { "type": ["string", "null"], "pattern": "^TASK-[0-9]{3}$" },
     "startedAt": { "type": ["string", "null"], "format": "date-time" },
     "updatedAt": { "type": ["string", "null"], "format": "date-time" },
-    "taskStatuses": {
+    "activeRunLock": {
+      "type": ["object", "null"],
+      "description": "运行锁。用于避免同一 feature 被多个 loop 同时写入。",
+      "additionalProperties": false,
+      "required": ["lockId", "owner", "acquiredAt", "heartbeatAt", "expiresAt"],
+      "properties": {
+        "lockId": { "type": "string" },
+        "owner": { "type": "string" },
+        "acquiredAt": { "type": "string", "format": "date-time" },
+        "heartbeatAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "taskStates": {
       "type": "object",
+      "description": "任务运行态。key 必须是 task-plan 中存在的 taskId。",
       "patternProperties": {
         "^TASK-[0-9]{3}$": {
-          "type": "string",
-          "enum": ["draft", "pending", "ready", "running", "checks_failed", "review_failed", "needs_human", "done", "cancelled"]
+          "$ref": "#/$defs/taskState"
         }
       },
       "additionalProperties": false
@@ -55,6 +68,37 @@
         }
       },
       "default": []
+    }
+  },
+  "$defs": {
+    "taskState": {
+      "type": "object",
+      "required": ["status", "attempts", "updatedAt"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["draft", "pending", "ready", "running", "checks_failed", "review_failed", "needs_human", "done", "cancelled"],
+          "description": "任务当前运行状态。"
+        },
+        "attempts": { "type": "integer", "minimum": 0, "description": "当前任务已执行尝试次数。" },
+        "maxAttempts": { "type": "integer", "minimum": 1, "description": "从 task retryPolicy 解析出的最大尝试次数。" },
+        "lastRunId": { "type": ["string", "null"], "pattern": "^RUN-[A-Z0-9][A-Z0-9-]*$" },
+        "lastIssue": {
+          "type": ["object", "null"],
+          "description": "最近一次异常摘要。用于循环结束后的异常清单和下一轮修复上下文。",
+          "additionalProperties": false,
+          "required": ["type", "summary", "source", "createdAt"],
+          "properties": {
+            "type": { "type": "string", "description": "异常类型，例如 acceptance_mismatch、scope_change_required、check_error、retry_exhausted。" },
+            "summary": { "type": "string", "description": "异常摘要。" },
+            "source": { "type": "string", "enum": ["executor", "check", "reviewer", "orchestrator", "validator"], "description": "异常来源。" },
+            "requiredDecision": { "type": "string", "description": "需要人工决策时填写。", "default": "" },
+            "createdAt": { "type": "string", "format": "date-time", "description": "异常创建时间。" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
     }
   }
 }

@@ -54,7 +54,6 @@
         "id",
         "title",
         "type",
-        "status",
         "sourceStoryIds",
         "targetBaseId",
         "dependsOn",
@@ -74,11 +73,6 @@
           "type": "string",
           "enum": ["setup", "schema", "backend", "middle", "client", "integration", "test", "docs", "refactor", "fix"],
           "description": "任务类型。用于 skill 匹配和报告分组。"
-        },
-        "status": {
-          "type": "string",
-          "enum": ["draft", "pending", "ready", "running", "checks_failed", "review_failed", "needs_human", "done", "cancelled"],
-          "description": "任务状态。引擎不做阻塞等待，只标记状态并在循环结束汇总异常。"
         },
         "sourceStoryIds": {
           "type": "array",
@@ -167,12 +161,12 @@
     },
     "check": {
       "type": "object",
-      "required": ["id", "name", "type", "command", "required"],
+      "required": ["id", "name", "type", "required"],
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "description": "检查 ID。" },
         "name": { "type": "string", "description": "检查名称。" },
-        "type": { "type": "string", "enum": ["build", "lint", "typecheck", "unit", "api", "e2e", "health", "command"], "description": "检查类型。" },
+        "type": { "type": "string", "enum": ["build", "lint", "typecheck", "unit", "api", "e2e", "health", "command", "http", "manual"], "description": "检查类型。command 使用本地命令，http 使用结构化接口检查，manual 只生成待人工验证项。" },
         "baseId": {
           "anyOf": [
             { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
@@ -180,9 +174,86 @@
           ],
           "description": "检查所属项目内子项目 ID。跨端检查可为空。"
         },
-        "command": { "type": "string", "description": "检查命令。" },
+        "command": { "type": "string", "description": "检查命令。type 为 command/build/lint/typecheck/unit/e2e/health 时使用。" },
+        "http": {
+          "type": "object",
+          "description": "结构化 HTTP 检查配置。用于表达 401、404、关闭鉴权后的接口连通性等检查。",
+          "required": ["method", "url", "expectedStatus"],
+          "additionalProperties": false,
+          "properties": {
+            "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
+            "url": { "type": "string", "minLength": 1 },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "default": {}
+            },
+            "body": {
+              "description": "请求体。由具体 runner 决定如何序列化。",
+              "type": ["object", "array", "string", "number", "boolean", "null"]
+            },
+            "expectedStatus": { "type": "integer", "minimum": 100, "maximum": 599 },
+            "authMode": {
+              "type": "string",
+              "enum": ["default", "anonymous", "authenticated", "auth_disabled"],
+              "default": "default",
+              "description": "鉴权模式。auth_disabled 只允许在 dev/test 环境使用，并且必须有恢复策略。"
+            },
+            "setupCommands": {
+              "type": "array",
+              "description": "检查前命令。用于临时关闭鉴权等高风险操作时必须可审计。",
+              "items": { "type": "string" },
+              "default": []
+            },
+            "teardownCommands": {
+              "type": "array",
+              "description": "检查后命令。auth_disabled 场景必须恢复原配置。",
+              "items": { "type": "string" },
+              "default": []
+            }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "authMode": { "const": "auth_disabled" } }, "required": ["authMode"] },
+              "then": {
+                "required": ["teardownCommands"],
+                "properties": {
+                  "teardownCommands": { "minItems": 1 }
+                }
+              }
+            }
+          ]
+        },
+        "manual": {
+          "type": "object",
+          "description": "人工检查说明。",
+          "required": ["instruction"],
+          "additionalProperties": false,
+          "properties": {
+            "instruction": { "type": "string", "minLength": 1 }
+          }
+        },
         "required": { "type": "boolean", "description": "是否必须通过。" }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["build", "lint", "typecheck", "unit", "api", "e2e", "health", "command"] }
+            },
+            "required": ["type"]
+          },
+          "then": { "required": ["command"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "http" } }, "required": ["type"] },
+          "then": { "required": ["http"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "manual" } }, "required": ["type"] },
+          "then": { "required": ["manual"] }
+        }
+      ]
     },
     "lastIssue": {
       "type": "object",

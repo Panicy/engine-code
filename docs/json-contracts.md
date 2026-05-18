@@ -2,6 +2,9 @@
 
 本文档定义 AI 开发引擎第一版正式 JSON 契约。这里的 JSON 不只是存储格式，而是引擎各环节之间的协议：谁生成、谁确认、谁消费、下游如何根据它做决策。
 
+相关执行设计见：`docs/validator-and-run-loop.md`。
+总体建设清单见：`docs/engine-roadmap.md`。
+
 ## 总体原则
 
 - PRD 和任务拆分必须人工确认。
@@ -178,7 +181,7 @@ complete
 failed
 ```
 
-`run-state.json` 不记录 `blockedTasks`。异常任务统一通过 `loop-summary.json` 和 task 的 `lastIssue` 汇总。
+`task-plan.json` 是人工确认后的静态计划，不承载每轮变化的任务状态。任务状态、尝试次数、最近异常和运行锁记录在 `run-state.json`。`run-state.json` 不记录 `blockedTasks`；异常任务统一通过 `loop-summary.json` 的 `abnormalTasks[]` 汇总。
 
 ### Review 结论
 
@@ -196,19 +199,21 @@ needs_human
 
 1. 读取 `workspace.json`、`project.json`、`prd.json`、`task-plan.json`、`run-state.json`。
 2. 校验 `prd.json` 和 `task-plan.json` 都已人工批准。
-3. 将依赖全部 `done` 的 `pending` 任务标记为 `ready`。
-4. 选择 `ready`、`checks_failed`、`review_failed` 任务执行。
-5. 根据 `targetBaseId` 在 `project.json` 找到项目内子项目。
-6. 根据子项目的 `templateId` 加载对应 `template.json` 和 `skills.json`。
-7. 根据 `requiredSkillId` 找到执行 skill。
-8. 执行 task，并记录 `task-run.json`。
-9. 运行 `task.checks`。
-10. checks 失败则标记 `checks_failed`。
-11. checks 通过则进入 reviewer。
-12. review 失败则标记 `review_failed`。
-13. review 需要人工则标记 `needs_human`。
-14. review 通过则标记 `done`。
-15. 本轮结束后输出 `loop-summary.json`，列出异常状态和等待依赖的任务。
+3. 获取 feature 级运行锁，避免多个 loop 同时写入。
+4. 将依赖全部 `done` 的 `pending` 任务在 `run-state.json` 中标记为 `ready`。
+5. 选择 `ready`、`checks_failed`、`review_failed` 任务执行。
+6. 根据 `targetBaseId` 在 `project.json` 找到项目内子项目。
+7. 根据子项目的 `templateId` 加载对应 `template.json` 和 `skills.json`。
+8. 根据 `requiredSkillId` 找到执行 skill。
+9. 执行 task，并记录 `task-run.json`。
+10. 运行 `task.checks`。
+11. checks 失败则在 `run-state.json` 标记 `checks_failed`。
+12. checks 通过则进入 reviewer。
+13. review 失败则在 `run-state.json` 标记 `review_failed`。
+14. review 需要人工则在 `run-state.json` 标记 `needs_human`。
+15. review 通过则在 `run-state.json` 标记 `done`。
+16. 达到 `maxAttempts` 的失败任务转为 `needs_human`。
+17. 本轮结束后输出 `loop-summary.json`，列出异常状态和等待依赖的任务。
 
 ## 测试分层
 
@@ -344,7 +349,8 @@ Schema：`schemas/skills.schema.json`
 - `planId`
 - `status`
 - `currentTaskId`
-- `taskStatuses`
+- `activeRunLock`
+- `taskStates`
 - `completedTasks`
 - `artifacts`
 - `decisions`
