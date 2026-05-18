@@ -16,6 +16,8 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本使用 mock agent�
   - `run-state.json`
   - `loop-summary.json`
 - 支持失败 mock，用于验证异常状态和复跑入口。
+- 同一轮内每个 task 最多执行一次，失败任务留到下一轮重跑。
+- `task-run.json` 会追加 attempts，不覆盖历史。
 - 调用 Validator 做后置校验。
 
 ## 使用方式
@@ -63,5 +65,4 @@ node tools/run-loop/run-feature.mjs \
 - 接入真实 Agent Adapter。
 - 接入真实 Checks Runner。
 - 接入真实 Reviewer。
-- 完善 task-run 追加历史 attempts，而不是每次覆盖单文件。
 - 增加更细粒度的运行锁恢复策略。

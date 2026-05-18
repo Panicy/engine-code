@@ -51,6 +51,12 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(path.resolve(repoRoot, filePath), 'utf8'));
 }
 
+function readJsonIfExists(filePath) {
+  const abs = path.resolve(repoRoot, filePath);
+  if (!fs.existsSync(abs)) return null;
+  return JSON.parse(fs.readFileSync(abs, 'utf8'));
+}
+
 function readSchema(name) {
   return readJson(`schemas/${name}.schema.json`);
 }
@@ -140,6 +146,17 @@ function checkCommand(check) {
   if (check.http) return `${check.http.method} ${check.http.url} -> ${check.http.expectedStatus}`;
   if (check.manual) return `manual: ${check.manual.instruction}`;
   return check.type;
+}
+
+function mergeTaskRun(existing, next) {
+  if (!existing) return next;
+  const byAttempt = new Map();
+  for (const attempt of existing.attempts ?? []) byAttempt.set(attempt.attempt, attempt);
+  for (const attempt of next.attempts ?? []) byAttempt.set(attempt.attempt, attempt);
+  return {
+    ...next,
+    attempts: [...byAttempt.values()].sort((a, b) => a.attempt - b.attempt),
+  };
 }
 
 function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args }) {
@@ -269,13 +286,14 @@ function buildLoopSummary({ runState, taskPlan, startedAt, finishedAt, executedT
   const nextRunnableTaskIds = Object.entries(runState.taskStates)
     .filter(([, state]) => ['ready', 'checks_failed', 'review_failed'].includes(state.status))
     .map(([taskId]) => taskId);
+  const hasUnfinished = Object.values(runState.taskStates).some((state) => !['done', 'cancelled'].includes(state.status));
   return {
     schemaVersion: '0.1.0',
     runId: runState.runId,
     planId: runState.planId,
     startedAt,
     finishedAt,
-    status: abnormalTasks.length > 0 ? 'has_exceptions' : 'complete',
+    status: abnormalTasks.length > 0 || hasUnfinished ? 'has_exceptions' : 'complete',
     taskSummary,
     issues,
     abnormalTasks,
@@ -291,7 +309,11 @@ function runLoop(args) {
   const startedAt = nowIso();
   const templatesDir = args['templates-dir'] ?? '.engine/templates';
   const owner = args.owner ?? 'run-loop';
-  const maxTasks = Number.parseInt(args['max-tasks'] ?? '0', 10);
+  const maxTasksRaw = args['max-tasks'] ?? '0';
+  const maxTasks = /^\d+$/.test(maxTasksRaw) ? Number.parseInt(maxTasksRaw, 10) : Number.NaN;
+  if (!Number.isInteger(maxTasks) || maxTasks < 0) {
+    throw new Error('--max-tasks 必须是非负整数，0 表示尽量跑完所有可运行任务。');
+  }
   const featureDir = path.dirname(args['task-plan']);
   const taskPlan = readJson(args['task-plan']);
   const runState = readJson(args['run-state']);
@@ -327,49 +349,73 @@ function runLoop(args) {
       runState.activeRunLock.expiresAt = addMinutesIso(30);
       writeJsonAtomic(args['run-state'], runState);
 
-      const outcome = decideMockOutcome(task, args);
-      const finishedTaskAt = nowIso();
-      const desiredStatus = retryAwareStatus(state, outcome.nextStatus);
-      const lastIssue = desiredStatus === 'done' ? null : {
-        type: desiredStatus === 'needs_human' ? 'needs_human' : `${desiredStatus}_mock`,
-        summary: `mock ${desiredStatus} for ${task.id}`,
-        source: outcome.source ?? 'orchestrator',
-        requiredDecision: desiredStatus === 'needs_human' ? '请人工确认后恢复任务。' : '',
-        createdAt: finishedTaskAt,
-      };
-      const taskRun = buildTaskRun({
-        runState,
-        task,
-        attempt: state.attempts,
-        status: desiredStatus === 'done' ? 'passed' : desiredStatus,
-        startedAt: startedTaskAt,
-        finishedAt: finishedTaskAt,
-        lastIssue,
-        args,
-      });
-      const taskRunPath = artifactPath(featureDir, task.id, 'task-run.json');
-      schemaValidateArtifact('task-run', taskRun, taskRunPath);
-      writeJsonAtomic(taskRunPath, taskRun);
-      runState.artifacts.push({ type: 'taskRun', path: taskRunPath });
+      try {
+        const outcome = decideMockOutcome(task, args);
+        const finishedTaskAt = nowIso();
+        const desiredStatus = retryAwareStatus(state, outcome.nextStatus);
+        const lastIssue = desiredStatus === 'done' ? null : {
+          type: desiredStatus === 'needs_human' ? 'needs_human' : `${desiredStatus}_mock`,
+          summary: `mock ${desiredStatus} for ${task.id}`,
+          source: outcome.source ?? 'orchestrator',
+          requiredDecision: desiredStatus === 'needs_human' ? '请人工确认后恢复任务。' : '',
+          createdAt: finishedTaskAt,
+        };
+        const taskRun = buildTaskRun({
+          runState,
+          task,
+          attempt: state.attempts,
+          status: desiredStatus === 'done' ? 'passed' : desiredStatus,
+          startedAt: startedTaskAt,
+          finishedAt: finishedTaskAt,
+          lastIssue,
+          args,
+        });
+        const taskRunPath = artifactPath(featureDir, task.id, 'task-run.json');
+        const mergedTaskRun = mergeTaskRun(readJsonIfExists(taskRunPath), taskRun);
+        schemaValidateArtifact('task-run', mergedTaskRun, taskRunPath);
+        writeJsonAtomic(taskRunPath, mergedTaskRun);
+        if (!runState.artifacts.some((artifact) => artifact.type === 'taskRun' && artifact.path === taskRunPath)) {
+          runState.artifacts.push({ type: 'taskRun', path: taskRunPath });
+        }
 
-      if (outcome.reviewVerdict) {
-        const review = buildReview({ runState, task, verdict: outcome.reviewVerdict, reviewedAt: finishedTaskAt });
-        const reviewPath = artifactPath(featureDir, task.id, 'review.json');
-        schemaValidateArtifact('review', review, reviewPath);
-        writeJsonAtomic(reviewPath, review);
-        runState.artifacts.push({ type: 'review', path: reviewPath });
+        if (outcome.reviewVerdict) {
+          const review = buildReview({ runState, task, verdict: outcome.reviewVerdict, reviewedAt: finishedTaskAt });
+          const reviewPath = artifactPath(featureDir, task.id, 'review.json');
+          schemaValidateArtifact('review', review, reviewPath);
+          writeJsonAtomic(reviewPath, review);
+          if (!runState.artifacts.some((artifact) => artifact.type === 'review' && artifact.path === reviewPath)) {
+            runState.artifacts.push({ type: 'review', path: reviewPath });
+          }
+        }
+
+        state.status = desiredStatus;
+        state.lastIssue = lastIssue;
+        state.lastRunId = runState.runId;
+        state.updatedAt = finishedTaskAt;
+        if (desiredStatus === 'done' && !runState.completedTasks.includes(task.id)) runState.completedTasks.push(task.id);
+        runState.updatedAt = finishedTaskAt;
+        executedTaskIds.push(task.id);
+        executedThisLoop.add(task.id);
+        executed += 1;
+        writeJsonAtomic(args['run-state'], runState);
+      } catch (error) {
+        const failedAt = nowIso();
+        state.status = 'needs_human';
+        state.lastIssue = {
+          type: 'orchestrator_error',
+          summary: `Run Loop 执行 ${task.id} 时异常：${error.message}`,
+          source: 'orchestrator',
+          requiredDecision: '请检查运行产物和修复 orchestrator 错误后恢复任务。',
+          createdAt: failedAt,
+        };
+        state.lastRunId = runState.runId;
+        state.updatedAt = failedAt;
+        runState.updatedAt = failedAt;
+        executedTaskIds.push(task.id);
+        executedThisLoop.add(task.id);
+        executed += 1;
+        writeJsonAtomic(args['run-state'], runState);
       }
-
-      state.status = desiredStatus;
-      state.lastIssue = lastIssue;
-      state.lastRunId = runState.runId;
-      state.updatedAt = finishedTaskAt;
-      if (desiredStatus === 'done' && !runState.completedTasks.includes(task.id)) runState.completedTasks.push(task.id);
-      runState.updatedAt = finishedTaskAt;
-      executedTaskIds.push(task.id);
-      executedThisLoop.add(task.id);
-      executed += 1;
-      writeJsonAtomic(args['run-state'], runState);
     }
   } finally {
     releaseLock(runState);
