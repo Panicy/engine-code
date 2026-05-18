@@ -34,7 +34,7 @@
 | Project 初始化模块 | todo | - | 创建 workspace/project/feature 初始结构 |
 | PRD 生成与确认模块 | in_progress | `tools/prd-builder/` | 已支持规则化生成 PRD 草稿、项目校验、多故事输入和人工确认工具 |
 | Task Plan 生成与确认模块 | in_progress | `tools/task-planner/` | 已支持规则化生成 task-plan 草稿和人工确认工具 |
-| Run Loop 执行器 | todo | - | 实现串行循环、运行锁、任务选择、状态推进 |
+| Run Loop 执行器 | in_progress | `tools/run-loop/run-feature.mjs` | 已支持 mock 执行循环、运行锁、状态推进和产物写入 |
 | Agent Adapter | todo | - | 根据 task + skill 拼装 agent 输入并调用执行 |
 | Checks Runner | todo | - | 执行 command/http/manual checks，并结构化输出结果 |
 | Reviewer Adapter | todo | - | 检查 allowedPaths、quality gates、acceptance criteria |
@@ -95,25 +95,25 @@
 
 ### M2：Run Loop MVP
 
-状态：`todo`
+状态：`in_progress`
 
 目标：让引擎能跑一轮串行自动循环。
 
 任务：
 
-- [ ] 实现 feature 级运行锁。
-- [ ] 实现 stale running 检测。
-- [ ] 实现 pending -> ready 推进。
-- [ ] 选择 `ready`、`checks_failed`、`review_failed` 任务。
-- [ ] 按 task-plan 顺序串行执行。
-- [ ] 解析 base、template、skill。
-- [ ] 构造 task execution context。
-- [ ] 接入 Agent Adapter 占位实现。
-- [ ] 执行后写入 task-run。
-- [ ] 根据 checks/review 更新 run-state。
-- [ ] 达到 maxAttempts 后转 needs_human。
-- [ ] 写入 loop-summary。
-- [ ] 每轮前后调用 Validator。
+- [x] 实现 feature 级运行锁。
+- [x] 实现 pending -> ready 推进。
+- [x] 选择 `ready`、`checks_failed`、`review_failed` 任务。
+- [x] 按 task-plan 顺序串行执行。
+- [x] 接入 mock Agent Adapter。
+- [x] 执行后写入 task-run。
+- [x] mock checks/review 并更新 run-state。
+- [x] 达到 maxAttempts 后转 needs_human。
+- [x] 写入 loop-summary。
+- [x] 每轮前后调用 Validator。
+- [ ] 实现 stale running 恢复策略。
+- [ ] 解析 base、template、skill 到完整 task execution context。
+- [ ] 接入真实 Agent Adapter。
 
 完成标准：
 
