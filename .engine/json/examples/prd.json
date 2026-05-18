@@ -46,6 +46,50 @@
       "dependencies": []
     }
   ],
+  "businessRules": [
+    {
+      "id": "BR-001",
+      "text": "用户标签名称在同一租户下不可重复。",
+      "verification": "新增或编辑同名标签时返回明确错误。"
+    }
+  ],
+  "dataEntities": [
+    {
+      "id": "DE-001",
+      "name": "用户标签",
+      "description": "用于给用户分类的标签。",
+      "fields": [
+        {
+          "name": "tagName",
+          "type": "string",
+          "required": true,
+          "description": "标签名称"
+        },
+        {
+          "name": "tagColor",
+          "type": "string",
+          "required": false,
+          "description": "标签颜色"
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "id": "PERM-001",
+      "code": "system:userTag:list",
+      "name": "用户标签查询",
+      "targetBaseId": "backend",
+      "description": "允许查询用户标签列表。"
+    }
+  ],
+  "openQuestions": [],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "用户标签一期只用于后台管理。"
+    }
+  ],
   "constraints": {
     "techStack": ["backend-starter", "middle-starter", "uniapp-template"],
     "architecture": ["后端、中台、客户端分任务实现。"],

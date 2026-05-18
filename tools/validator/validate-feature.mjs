@@ -418,6 +418,10 @@ function validateReferences(report, data, files, options) {
 
 function validateApprovals(report, data, files) {
   const { prd, taskPlan } = data;
+  const openQuestions = (prd.openQuestions ?? []).filter((question) => question.status === 'open');
+  if (openQuestions.length > 0 && (prd.status === 'approved' || prd.humanApproval?.approved === true)) {
+    addIssue(report, issue('error', 'PRD_APPROVED_WITH_OPEN_QUESTIONS', files.prd, '$.openQuestions', `PRD 已确认但仍存在未关闭问题：${openQuestions.map((item) => item.id).join(', ')}。`));
+  }
   if (prd.status !== 'approved' || prd.humanApproval?.approved !== true) {
     addIssue(report, issue('error', 'PRD_NOT_APPROVED', files.prd, '$.humanApproval.approved', 'PRD 尚未人工确认，不能进入自动执行。'));
   }

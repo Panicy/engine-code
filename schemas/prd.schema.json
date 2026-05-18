@@ -81,6 +81,36 @@
         }
       }
     },
+    "businessRules": {
+      "type": "array",
+      "description": "业务规则。用于指导后端校验、数据库约束、前端提示和测试用例。",
+      "items": { "$ref": "#/$defs/businessRule" },
+      "default": []
+    },
+    "dataEntities": {
+      "type": "array",
+      "description": "需求涉及的数据对象。用于辅助数据库、接口、表单和列表任务拆分。",
+      "items": { "$ref": "#/$defs/dataEntity" },
+      "default": []
+    },
+    "permissions": {
+      "type": "array",
+      "description": "权限要求。用于生成后端权限码、菜单权限 SQL 和前端按钮权限。",
+      "items": { "$ref": "#/$defs/permission" },
+      "default": []
+    },
+    "openQuestions": {
+      "type": "array",
+      "description": "待人工确认问题。存在 open 问题时不建议批准 PRD。",
+      "items": { "$ref": "#/$defs/openQuestion" },
+      "default": []
+    },
+    "assumptions": {
+      "type": "array",
+      "description": "当前默认假设。用于减少任务拆分和执行时的自由发挥。",
+      "items": { "$ref": "#/$defs/textItem" },
+      "default": []
+    },
     "constraints": {
       "type": "object",
       "required": ["techStack", "architecture", "security", "quality"],
@@ -128,6 +158,64 @@
         "id": { "type": "string" },
         "text": { "type": "string", "minLength": 1 },
         "verification": { "type": "string", "minLength": 1 }
+      }
+    },
+    "businessRule": {
+      "type": "object",
+      "required": ["id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^BR-[0-9]{3}$" },
+        "text": { "type": "string", "minLength": 1 },
+        "verification": { "type": "string", "default": "" }
+      }
+    },
+    "dataEntity": {
+      "type": "object",
+      "required": ["id", "name", "description", "fields"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^DE-[0-9]{3}$" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type", "required", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "type": { "type": "string", "minLength": 1 },
+              "required": { "type": "boolean" },
+              "description": { "type": "string" }
+            }
+          },
+          "default": []
+        }
+      }
+    },
+    "permission": {
+      "type": "object",
+      "required": ["id", "code", "name", "targetBaseId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^PERM-[0-9]{3}$" },
+        "code": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "targetBaseId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "description": { "type": "string", "default": "" }
+      }
+    },
+    "openQuestion": {
+      "type": "object",
+      "required": ["id", "question", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^Q-[0-9]{3}$" },
+        "question": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["open", "answered"] },
+        "answer": { "type": "string", "default": "" }
       }
     },
     "humanApproval": {

@@ -137,6 +137,82 @@
 }
 ```
 
+## `features/user-tags/prd.json`
+
+```jsonc
+{
+  "schemaVersion": "0.1.0",
+  "prdId": "PRD-DEMO",
+  "status": "draft",
+  "feature": {
+    "id": "user-tags",
+    "name": "用户标签",
+    "summary": "支持管理员维护用户标签。"
+  },
+  "impactedBaseIds": ["backend", "middle"],
+  "goals": [{ "id": "G-001", "text": "管理员可以维护用户标签。" }],
+  "nonGoals": [{ "id": "NG-001", "text": "不实现自动标签推荐算法。" }],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "管理员维护用户标签",
+      "story": "作为管理员，我希望新增、编辑、删除和查询用户标签，以便对用户进行分类管理。",
+      "acceptanceCriteria": [
+        {
+          "id": "AC-001",
+          "text": "管理员可以新增用户标签。",
+          "verification": "通过中台页面提交新增表单，并确认后端返回成功。"
+        }
+      ],
+      "priority": "must",
+      "dependencies": []
+    }
+  ],
+  // 业务规则会影响后端校验、数据库约束和测试用例
+  "businessRules": [
+    {
+      "id": "BR-001",
+      "text": "用户标签名称在同一租户下不可重复。",
+      "verification": "新增或编辑同名标签时返回明确错误。"
+    }
+  ],
+  // 数据对象会影响建表、接口、表单和列表字段
+  "dataEntities": [
+    {
+      "id": "DE-001",
+      "name": "用户标签",
+      "description": "用于给用户分类的标签。",
+      "fields": [
+        { "name": "tagName", "type": "string", "required": true, "description": "标签名称" }
+      ]
+    }
+  ],
+  // 权限要求会影响 permission-manifest、菜单权限 SQL 和前端按钮权限
+  "permissions": [
+    {
+      "id": "PERM-001",
+      "code": "system:userTag:list",
+      "name": "用户标签查询",
+      "targetBaseId": "backend"
+    }
+  ],
+  // openQuestions 存在 open 项时，不建议批准 PRD
+  "openQuestions": [],
+  "assumptions": [{ "id": "ASM-001", "text": "用户标签一期只用于后台管理。" }],
+  "constraints": {
+    "techStack": ["backend-starter", "middle-starter"],
+    "architecture": ["后端和中台分任务实现。"],
+    "security": ["受保护接口必须保留鉴权。"],
+    "quality": ["新增接口需要验证 401/404。"]
+  },
+  "humanApproval": {
+    "approved": false,
+    "approvedBy": null,
+    "approvedAt": null
+  }
+}
+```
+
 ## `features/user-tags/task-plan.json`
 
 ```jsonc

@@ -299,6 +299,11 @@ Schema：`schemas/project.schema.json`
 - `goals`：目标。
 - `nonGoals`：非目标，用于限制 agent 过度发挥。
 - `userStories`：用户故事及验收标准。
+- `businessRules`：业务规则，会影响后端校验、数据库约束、前端提示和测试用例。
+- `dataEntities`：数据对象，会影响建表、接口、表单和列表字段。
+- `permissions`：权限要求，会影响权限码、菜单权限 SQL 和前端按钮权限。
+- `openQuestions`：待人工确认问题，存在 open 项时不建议批准 PRD。
+- `assumptions`：默认假设，用于减少后续任务拆分和执行时的自由发挥。
 - `constraints`：技术、架构、安全、质量约束。
 - `humanApproval`：人工确认信息。
 

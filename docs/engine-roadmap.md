@@ -32,7 +32,7 @@
 | 跨文件引用校验器 | in_progress | `tools/validator/validate-feature.mjs` | 已校验 project/template/skill/task/story/check 等主要引用 |
 | 状态一致性校验器 | in_progress | `tools/validator/validate-feature.mjs` | 已校验 run-state 与 task-plan 的 task 覆盖、依赖和状态合法性 |
 | Project 初始化模块 | todo | - | 创建 workspace/project/feature 初始结构 |
-| PRD 生成与确认模块 | in_progress | `tools/prd-builder/create-prd.mjs` | 已支持规则化生成 PRD 草稿，人工确认流程待补 |
+| PRD 生成与确认模块 | in_progress | `tools/prd-builder/` | 已支持规则化生成 PRD 草稿、项目校验、多故事输入和人工确认工具 |
 | Task Plan 生成与确认模块 | todo | - | 根据 PRD 生成 task-plan，支持人工确认 |
 | Run Loop 执行器 | todo | - | 实现串行循环、运行锁、任务选择、状态推进 |
 | Agent Adapter | todo | - | 根据 task + skill 拼装 agent 输入并调用执行 |
@@ -202,9 +202,12 @@
 - [x] 支持 feature 基础信息。
 - [x] 支持 impactedBaseIds。
 - [x] 生成基础 goals、nonGoals、userStories、constraints。
+- [x] 支持 project.json 校验 base 并推导 techStack。
+- [x] 支持多用户故事输入。
+- [x] 默认禁止覆盖已有 PRD，使用 `--force` 显式覆盖。
+- [x] 支持人工确认辅助命令。
+- [x] 扩展 businessRules、dataEntities、permissions、openQuestions、assumptions。
 - [ ] 支持从 Markdown 需求草稿生成。
-- [ ] 支持多用户故事输入。
-- [ ] 支持人工确认辅助命令。
 
 完成标准：
 
