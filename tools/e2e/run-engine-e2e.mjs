@@ -202,13 +202,26 @@ function testApprovalGate(baseDir) {
 
 function testHappyPath(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'happy-path');
-  const result = runLoop(paths);
+  const result = runLoop(paths, ['--agent-adapter', 'mock']);
   assert(result.summary.status === 'complete', '完整执行后 summary.status 应为 complete');
   assert(result.summary.taskSummary.done.length === 3, '完整执行后 3 个 task 应全部 done');
   const runState = readJson(paths.runState);
   assert(runState.status === 'complete', '完整执行后 run-state.status 应为 complete');
   assert(runState.activeRunLock === null, '完整执行后 activeRunLock 应释放');
   validateFeature(paths);
+}
+
+function testUnknownAgentAdapter(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'unknown-agent-adapter');
+  const result = runNode([
+    'tools/run-loop/run-feature.mjs',
+    '--project', projectPath,
+    '--prd', paths.prd,
+    '--task-plan', paths.taskPlan,
+    '--run-state', paths.runState,
+    '--agent-adapter', 'missing',
+  ], { expectFailure: true });
+  assert(result.stderr.includes('未知 Agent Adapter'), '未知 adapter 应被拒绝');
 }
 
 function testMaxTasksPause(baseDir) {
@@ -254,6 +267,7 @@ function testNeedsHuman(baseDir) {
 const tests = [
   ['JSON 契约文件可解析', (_baseDir) => validateJsonFixtures()],
   ['PRD 人工确认门禁', testApprovalGate],
+  ['未知 Agent Adapter 拒绝', testUnknownAgentAdapter],
   ['完整主流程', testHappyPath],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],

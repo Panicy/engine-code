@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateFiles, validateSchema } from '../validator/validate-feature.mjs';
+import { availableAgentAdapters, createAgentAdapter } from '../agent-adapters/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,7 @@ function usage() {
     '',
     '可选：',
     '  --templates-dir .engine/templates',
+    `  --agent-adapter ${availableAgentAdapters().join('|')}`,
     '  --max-tasks 0',
     '  --mock-fail-task TASK-001',
     '  --mock-fail-stage check|review|human',
@@ -141,13 +143,6 @@ function findNextRunnable(taskPlan, runState, executedThisLoop) {
   return null;
 }
 
-function checkCommand(check) {
-  if (check.command) return check.command;
-  if (check.http) return `${check.http.method} ${check.http.url} -> ${check.http.expectedStatus}`;
-  if (check.manual) return `manual: ${check.manual.instruction}`;
-  return check.type;
-}
-
 function mergeTaskRun(existing, next) {
   if (!existing) return next;
   const byAttempt = new Map();
@@ -159,31 +154,29 @@ function mergeTaskRun(existing, next) {
   };
 }
 
-function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args }) {
-  const checks = (task.checks ?? []).map((check) => ({
-    id: check.id,
-    command: checkCommand(check),
-    status: status === 'checks_failed' ? 'failed' : 'passed',
-    summary: status === 'checks_failed' ? 'mock check failed' : 'mock check passed',
-  }));
+function buildPromptInputs({ task, args }) {
+  return [
+    { type: 'prd', path: args.prd },
+    { type: 'taskPlan', path: args['task-plan'] },
+    { type: 'runState', path: args['run-state'] },
+    { type: 'task', path: `${args['task-plan']}#${task.id}` },
+    { type: 'skill', path: task.requiredSkillId },
+  ];
+}
+
+function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args, outcome }) {
   const item = {
     attempt,
     status,
-    agent: { tool: 'mock-agent', model: 'mock' },
+    agent: outcome.agent,
     startedAt,
     finishedAt,
-    promptInputs: [
-      { type: 'prd', path: args.prd },
-      { type: 'taskPlan', path: args['task-plan'] },
-      { type: 'runState', path: args['run-state'] },
-      { type: 'task', path: `${args['task-plan']}#${task.id}` },
-      { type: 'skill', path: task.requiredSkillId },
-    ],
-    changedFiles: [],
-    checks,
-    summary: status === 'passed' ? `mock agent completed ${task.id}` : `mock agent marked ${task.id} as ${status}`,
-    errors: [],
-    nextActions: status === 'passed' ? [] : ['下一轮自动重试或人工处理。'],
+    promptInputs: buildPromptInputs({ task, args }),
+    changedFiles: outcome.changedFiles ?? [],
+    checks: outcome.checks ?? [],
+    summary: outcome.summary ?? '',
+    errors: outcome.errors ?? [],
+    nextActions: outcome.nextActions ?? [],
   };
   if (lastIssue) item.lastIssue = lastIssue;
   return {
@@ -192,6 +185,31 @@ function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, 
     taskId: task.id,
     attempts: [item],
   };
+}
+
+function validateAdapterOutcome(outcome, adapterId) {
+  const requestedStatuses = new Set(['done', 'checks_failed', 'review_failed', 'needs_human']);
+  const taskRunStatuses = new Set(['passed', 'checks_failed', 'review_failed', 'needs_human']);
+  const reviewVerdicts = new Set(['pass', 'fail', 'needs_human', null, undefined]);
+  const sources = new Set(['executor', 'check', 'reviewer', 'orchestrator']);
+  if (!outcome || typeof outcome !== 'object') {
+    throw new Error(`${adapterId} adapter 返回值必须是对象。`);
+  }
+  if (!requestedStatuses.has(outcome.requestedStatus)) {
+    throw new Error(`${adapterId} adapter requestedStatus 非法：${outcome.requestedStatus}`);
+  }
+  if (!taskRunStatuses.has(outcome.taskRunStatus)) {
+    throw new Error(`${adapterId} adapter taskRunStatus 非法：${outcome.taskRunStatus}`);
+  }
+  if (!reviewVerdicts.has(outcome.reviewVerdict)) {
+    throw new Error(`${adapterId} adapter reviewVerdict 非法：${outcome.reviewVerdict}`);
+  }
+  if (!sources.has(outcome.source)) {
+    throw new Error(`${adapterId} adapter source 非法：${outcome.source}`);
+  }
+  if (!outcome.agent?.tool || !outcome.agent?.model) {
+    throw new Error(`${adapterId} adapter 必须返回 agent.tool 和 agent.model。`);
+  }
 }
 
 function buildReview({ runState, task, verdict, reviewedAt }) {
@@ -213,14 +231,6 @@ function buildReview({ runState, task, verdict, reviewedAt }) {
     suggestedFollowUpTasks: [],
     summary: verdict === 'pass' ? `mock review passed ${task.id}` : `mock review ${verdict} for ${task.id}`,
   };
-}
-
-function decideMockOutcome(task, args) {
-  if (args['mock-fail-task'] !== task.id) return { taskRunStatus: 'passed', reviewVerdict: 'pass', nextStatus: 'done' };
-  const stage = args['mock-fail-stage'] ?? 'check';
-  if (stage === 'check') return { taskRunStatus: 'checks_failed', reviewVerdict: null, nextStatus: 'checks_failed', source: 'check' };
-  if (stage === 'review') return { taskRunStatus: 'review_failed', reviewVerdict: 'fail', nextStatus: 'review_failed', source: 'reviewer' };
-  return { taskRunStatus: 'needs_human', reviewVerdict: 'needs_human', nextStatus: 'needs_human', source: 'reviewer' };
 }
 
 function retryAwareStatus(state, desiredStatus) {
@@ -308,6 +318,7 @@ function runLoop(args) {
   requireArg(args, 'run-state');
   const startedAt = nowIso();
   const templatesDir = args['templates-dir'] ?? '.engine/templates';
+  const adapter = createAgentAdapter(args['agent-adapter'] ?? 'mock');
   const owner = args.owner ?? 'run-loop';
   const maxTasksRaw = args['max-tasks'] ?? '0';
   const maxTasks = /^\d+$/.test(maxTasksRaw) ? Number.parseInt(maxTasksRaw, 10) : Number.NaN;
@@ -315,6 +326,8 @@ function runLoop(args) {
     throw new Error('--max-tasks 必须是非负整数，0 表示尽量跑完所有可运行任务。');
   }
   const featureDir = path.dirname(args['task-plan']);
+  const project = readJson(args.project);
+  const prd = readJson(args.prd);
   const taskPlan = readJson(args['task-plan']);
   const runState = readJson(args['run-state']);
   const tasksById = taskMap(taskPlan);
@@ -350,12 +363,23 @@ function runLoop(args) {
       writeJsonAtomic(args['run-state'], runState);
 
       try {
-        const outcome = decideMockOutcome(task, args);
+        const outcome = adapter.execute({
+          args,
+          project,
+          prd,
+          taskPlan,
+          runState,
+          task,
+          state,
+          attempt: state.attempts,
+          startedAt: startedTaskAt,
+        });
+        validateAdapterOutcome(outcome, adapter.id);
         const finishedTaskAt = nowIso();
-        const desiredStatus = retryAwareStatus(state, outcome.nextStatus);
+        const desiredStatus = retryAwareStatus(state, outcome.requestedStatus);
         const lastIssue = desiredStatus === 'done' ? null : {
-          type: desiredStatus === 'needs_human' ? 'needs_human' : `${desiredStatus}_mock`,
-          summary: `mock ${desiredStatus} for ${task.id}`,
+          type: desiredStatus === 'needs_human' ? 'needs_human' : `${desiredStatus}_adapter`,
+          summary: outcome.summary || `${adapter.id} adapter marked ${task.id} as ${desiredStatus}`,
           source: outcome.source ?? 'orchestrator',
           requiredDecision: desiredStatus === 'needs_human' ? '请人工确认后恢复任务。' : '',
           createdAt: finishedTaskAt,
@@ -369,6 +393,12 @@ function runLoop(args) {
           finishedAt: finishedTaskAt,
           lastIssue,
           args,
+          outcome: {
+            ...outcome,
+            summary: desiredStatus === 'done'
+              ? outcome.summary
+              : outcome.summary || `${adapter.id} adapter marked ${task.id} as ${desiredStatus}`,
+          },
         });
         const taskRunPath = artifactPath(featureDir, task.id, 'task-run.json');
         const mergedTaskRun = mergeTaskRun(readJsonIfExists(taskRunPath), taskRun);
