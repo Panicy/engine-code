@@ -229,12 +229,16 @@
 - [x] 按用户故事生成 storyGroups。
 - [x] 按 impactedBaseIds 生成多端任务。
 - [x] 根据 templateId 绑定默认 skill。
-- [x] 自动生成 backend -> middle/client 依赖。
+- [x] 固定 backend -> middle -> client 排序，避免输入顺序影响依赖。
+- [x] 自动生成 schema -> backend -> middle/client 依赖。
 - [x] 从模板 defaultChecks 生成 task checks。
 - [x] 默认禁止覆盖已有 task-plan，使用 `--force` 显式覆盖。
 - [x] 支持人工确认辅助命令。
-- [ ] 根据 businessRules/dataEntities/permissions 生成更精细任务。
-- [ ] 生成初始 run-state.json。
+- [x] 根据 dataEntities 生成后端 schema/database task。
+- [x] 生成初始 run-state.json。
+- [x] 确认 task-plan 前可接入 Validator。
+- [ ] 根据 permissions 生成 permission-manifest 相关任务。
+- [ ] 根据 businessRules 生成更精细 checks。
 - [ ] 支持 LLM 辅助拆分。
 
 完成标准：

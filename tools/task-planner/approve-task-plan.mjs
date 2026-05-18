@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateFiles } from '../validator/validate-feature.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +16,10 @@ function usage() {
     '  --by <确认人>',
     '',
     '可选：',
+    '  --project <project.json>',
+    '  --prd <prd.json>',
+    '  --run-state <run-state.json>',
+    '  --templates-dir .engine/templates',
     '  --notes <确认备注>',
   ].join('\n');
 }
@@ -46,6 +52,29 @@ function requireArg(args, key) {
   }
 }
 
+function validateBeforeApprove(args, taskPlan) {
+  const hasValidatorInputs = args.project || args.prd || args['run-state'];
+  if (!hasValidatorInputs) return;
+  requireArg(args, 'project');
+  requireArg(args, 'prd');
+  requireArg(args, 'run-state');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'engine-task-plan-approve-'));
+  const tmpTaskPlanPath = path.join(tmpDir, 'task-plan.approved.json');
+  fs.writeFileSync(tmpTaskPlanPath, `${JSON.stringify(taskPlan, null, 2)}\n`, 'utf8');
+
+  const report = validateFiles({
+    project: args.project,
+    prd: args.prd,
+    'task-plan': tmpTaskPlanPath,
+    'run-state': args['run-state'],
+    'templates-dir': args['templates-dir'] ?? '.engine/templates',
+  });
+  if (!report.valid) {
+    throw new Error(`Validator 校验失败，拒绝确认 task-plan：\n${JSON.stringify(report, null, 2)}`);
+  }
+}
+
 function main() {
   try {
     const args = parseArgs(process.argv);
@@ -68,6 +97,7 @@ function main() {
       notes: args.notes ?? taskPlan.humanApproval?.notes ?? '',
     };
 
+    validateBeforeApprove(args, taskPlan);
     fs.writeFileSync(taskPlanPath, `${JSON.stringify(taskPlan, null, 2)}\n`, 'utf8');
     console.log(JSON.stringify({
       ok: true,
