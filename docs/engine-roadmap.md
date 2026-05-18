@@ -33,7 +33,7 @@
 | 状态一致性校验器 | in_progress | `tools/validator/validate-feature.mjs` | 已校验 run-state 与 task-plan 的 task 覆盖、依赖和状态合法性 |
 | Project 初始化模块 | todo | - | 创建 workspace/project/feature 初始结构 |
 | PRD 生成与确认模块 | in_progress | `tools/prd-builder/` | 已支持规则化生成 PRD 草稿、项目校验、多故事输入和人工确认工具 |
-| Task Plan 生成与确认模块 | todo | - | 根据 PRD 生成 task-plan，支持人工确认 |
+| Task Plan 生成与确认模块 | in_progress | `tools/task-planner/` | 已支持规则化生成 task-plan 草稿和人工确认工具 |
 | Run Loop 执行器 | todo | - | 实现串行循环、运行锁、任务选择、状态推进 |
 | Agent Adapter | todo | - | 根据 task + skill 拼装 agent 输入并调用执行 |
 | Checks Runner | todo | - | 执行 command/http/manual checks，并结构化输出结果 |
@@ -215,12 +215,39 @@
 - 生成后可进入人工审查。
 - 未人工确认时 Validator 会阻止进入 Run Loop。
 
+### M7：Task Planner MVP
+
+状态：`in_progress`
+
+目标：从已确认 PRD 生成可审查的 `task-plan.json` 草稿。
+
+任务：
+
+- [x] 实现 task-plan 草稿生成器。
+- [x] 默认要求 PRD 已人工确认。
+- [x] 支持开发验证时 `--allow-draft-prd`。
+- [x] 按用户故事生成 storyGroups。
+- [x] 按 impactedBaseIds 生成多端任务。
+- [x] 根据 templateId 绑定默认 skill。
+- [x] 自动生成 backend -> middle/client 依赖。
+- [x] 从模板 defaultChecks 生成 task checks。
+- [x] 默认禁止覆盖已有 task-plan，使用 `--force` 显式覆盖。
+- [x] 支持人工确认辅助命令。
+- [ ] 根据 businessRules/dataEntities/permissions 生成更精细任务。
+- [ ] 生成初始 run-state.json。
+- [ ] 支持 LLM 辅助拆分。
+
+完成标准：
+
+- 能生成符合 `schemas/task-plan.schema.json` 的 task-plan 草稿。
+- 生成的 task-plan 能通过 Validator 的引用校验。
+- 未人工确认时 Validator 会阻止进入 Run Loop。
+
 ## 当前优先级
 
 近期建议按以下顺序推进：
 
-1. M6 PRD Builder MVP。
-2. Task Planner MVP。
+1. M7 Task Planner MVP。
 3. M2 Run Loop MVP。
 4. M3 Checks Runner MVP。
 5. M4 Reviewer MVP。
