@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validateFiles } from '../validator/validate-feature.mjs';
+import { runChecks } from '../checks-runner/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -156,13 +157,14 @@ function approveTaskPlan(paths) {
 }
 
 function runLoop(paths, extraArgs = []) {
+  const normalizedExtraArgs = extraArgs.includes('--checks-mode') ? extraArgs : ['--checks-mode', 'mock', ...extraArgs];
   return parseCommandJson(runNode([
     'tools/run-loop/run-feature.mjs',
     '--project', projectPath,
     '--prd', paths.prd,
     '--task-plan', paths.taskPlan,
     '--run-state', paths.runState,
-    ...extraArgs,
+    ...normalizedExtraArgs,
   ]));
 }
 
@@ -234,7 +236,7 @@ function testUnknownChecksMode(baseDir) {
     '--run-state', paths.runState,
     '--checks-mode', 'missing',
   ], { expectFailure: true });
-  assert(result.stderr.includes('--checks-mode 必须是 mock 或 command'), '未知 checks-mode 应被拒绝');
+  assert(result.stderr.includes('--checks-mode 必须是 real、mock 或 command'), '未知 checks-mode 应被拒绝');
 }
 
 function testMaxTasksPause(baseDir) {
@@ -266,6 +268,60 @@ function testChecksRunnerFailure(baseDir) {
   assert(taskRun.attempts[0].checks.some((check) => check.id === 'backend-compile' && check.status === 'failed'), '失败 check 应写入 task-run');
 }
 
+function testChecksRunnerRealCommand() {
+  const result = runChecks({
+    id: 'TASK-999',
+    checks: [
+      {
+        id: 'real-command-pass',
+        name: '真实命令通过',
+        type: 'command',
+        command: `${process.execPath} -e "process.exit(0)"`,
+        required: true,
+      },
+      {
+        id: 'real-command-fail',
+        name: '真实命令失败',
+        type: 'command',
+        command: `${process.execPath} -e "process.exit(7)"`,
+        required: true,
+      },
+    ],
+  }, {
+    mode: 'real',
+    cwd: repoRoot,
+    timeoutMs: 10000,
+  });
+  assert(result.status === 'checks_failed', '真实命令失败应让检查结果为 checks_failed');
+  assert(result.checks.some((check) => check.id === 'real-command-pass' && check.status === 'passed'), '真实通过命令应记录 passed');
+  assert(result.checks.some((check) => check.id === 'real-command-fail' && check.status === 'failed'), '真实失败命令应记录 failed');
+}
+
+function testChecksRunnerRealHttp() {
+  const result = runChecks({
+    id: 'TASK-998',
+    checks: [
+      {
+        id: 'real-http-pass',
+        name: '真实 HTTP 通过',
+        type: 'http',
+        required: true,
+        http: {
+          method: 'GET',
+          url: 'data:text/plain,ok',
+          expectedStatus: 200,
+        },
+      },
+    ],
+  }, {
+    mode: 'real',
+    cwd: repoRoot,
+    timeoutMs: 10000,
+  });
+  assert(result.status === 'passed', '真实 HTTP 状态码匹配应通过');
+  assert(result.checks.some((check) => check.id === 'real-http-pass' && check.status === 'passed'), '真实 HTTP 检查应记录 passed');
+}
+
 function testReviewFailureRetry(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'review-failure-retry');
   const result = runLoop(paths, ['--mock-fail-task', 'TASK-001', '--mock-fail-stage', 'review']);
@@ -294,6 +350,8 @@ const tests = [
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],
   ['Checks Runner 定点失败', testChecksRunnerFailure],
+  ['Checks Runner 真实命令', testChecksRunnerRealCommand],
+  ['Checks Runner 真实 HTTP', testChecksRunnerRealHttp],
   ['评审失败复跑入口', testReviewFailureRetry],
   ['needs_human 非阻塞状态', testNeedsHuman],
 ];

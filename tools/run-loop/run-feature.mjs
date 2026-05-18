@@ -21,7 +21,7 @@ function usage() {
     '可选：',
     '  --templates-dir .engine/templates',
     `  --agent-adapter ${availableAgentAdapters().join('|')}`,
-    '  --checks-mode mock|command',
+    '  --checks-mode real|mock|command',
     '  --max-tasks 0',
     '  --mock-fail-task TASK-001',
     '  --mock-fail-stage check|review|human',
@@ -347,9 +347,9 @@ function runLoop(args) {
   const startedAt = nowIso();
   const templatesDir = args['templates-dir'] ?? '.engine/templates';
   const adapter = createAgentAdapter(args['agent-adapter'] ?? 'mock');
-  const checksMode = args['checks-mode'] ?? 'mock';
-  if (!['mock', 'command'].includes(checksMode)) {
-    throw new Error('--checks-mode 必须是 mock 或 command。');
+  const checksMode = args['checks-mode'] ?? 'real';
+  if (!['real', 'mock', 'command'].includes(checksMode)) {
+    throw new Error('--checks-mode 必须是 real、mock 或 command。');
   }
   const owner = args.owner ?? 'run-loop';
   const maxTasksRaw = args['max-tasks'] ?? '0';

@@ -1,6 +1,6 @@
 # Run Loop
 
-Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapter 执行 task，并通过 Checks Runner 统一检查 task 结果。默认配置仍以 mock 为主，不执行真实代码开发。
+Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapter 执行 task，并通过 Checks Runner 统一检查 task 结果。默认 checks 使用真实模式执行。
 
 ## 当前能力
 
@@ -11,7 +11,7 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapt
 - 通过 `--agent-adapter` 选择 task 执行器。
 - 通过 `--checks-mode` 选择检查模式。
 - 默认 `mock` adapter 会模拟 agent 和 review。
-- 默认 `mock` checks 会生成标准化检查结果。
+- 默认 `real` checks 会真实执行 command 和 HTTP 检查。
 - 写入：
   - `runs/<taskId>/task-run.json`
   - `runs/<taskId>/review.json`
@@ -37,7 +37,7 @@ node tools/run-loop/run-feature.mjs \
 ```bash
 --templates-dir .engine/templates
 --agent-adapter mock
---checks-mode mock
+--checks-mode real
 --max-tasks 1
 --mock-fail-task TASK-001
 --mock-fail-stage check
@@ -59,8 +59,9 @@ Adapter 只返回单个 task 的执行 outcome，不直接修改 `run-state.json
 
 当前支持：
 
-- `mock`：默认模式，生成标准化检查结果；可用 `--mock-fail-check <checkId>` 定点模拟失败。
-- `command`：执行带 `command` 字段的检查命令。
+- `real`：默认模式，真实执行 command 和 HTTP 检查。
+- `command`：`real` 的兼容别名。
+- `mock`：开发回归模式，生成标准化检查结果；可用 `--mock-fail-check <checkId>` 定点模拟失败。
 - `manual` 检查不会自动通过；必需 manual 检查会让任务进入 `checks_failed`。
 
 检查失败时，Run Loop 会将任务标记为 `checks_failed`，并把每个 check 的结果写入 `task-run.json`。
@@ -97,6 +98,6 @@ node tools/run-loop/run-feature.mjs \
 ## 后续增强
 
 - 接入真实 `codex` 或 `shell` Agent Adapter。
-- 增强 HTTP Checks Runner，覆盖 401/403、404、auth_disabled setup/teardown。
+- 增强 Checks Runner 的鉴权令牌注入和响应体断言。
 - 接入真实 Reviewer。
 - 增加更细粒度的运行锁恢复策略。
