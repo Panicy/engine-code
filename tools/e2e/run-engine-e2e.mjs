@@ -210,6 +210,10 @@ function testHappyPath(baseDir) {
   const runState = readJson(paths.runState);
   assert(runState.status === 'complete', '完整执行后 run-state.status 应为 complete');
   assert(runState.activeRunLock === null, '完整执行后 activeRunLock 应释放');
+  assert(runState.artifacts.some((artifact) => artifact.type === 'taskContext'), 'Run Loop 应生成 taskContext 产物');
+  const taskContext = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-context.json'));
+  assert(taskContext.skill.id === 'ruoyi-module-crud', 'taskContext 应装配 requiredSkillId 对应的 skill');
+  assert(taskContext.skill.document.includes('# Skill: ruoyi-module-crud'), 'taskContext 应包含 skill markdown 全文');
   validateFeature(paths);
 }
 

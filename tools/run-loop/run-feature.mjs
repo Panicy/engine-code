@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { validateFiles, validateSchema } from '../validator/validate-feature.mjs';
 import { availableAgentAdapters, createAgentAdapter } from '../agent-adapters/index.mjs';
 import { runChecks } from '../checks-runner/index.mjs';
+import { buildTaskContext } from '../skill-context/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -157,24 +158,25 @@ function mergeTaskRun(existing, next) {
   };
 }
 
-function buildPromptInputs({ task, args }) {
+function buildPromptInputs({ task, args, taskContextPath }) {
   return [
     { type: 'prd', path: args.prd },
     { type: 'taskPlan', path: args['task-plan'] },
     { type: 'runState', path: args['run-state'] },
     { type: 'task', path: `${args['task-plan']}#${task.id}` },
     { type: 'skill', path: task.requiredSkillId },
+    { type: 'notes', path: taskContextPath },
   ];
 }
 
-function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args, outcome }) {
+function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args, outcome, taskContextPath }) {
   const item = {
     attempt,
     status,
     agent: outcome.agent,
     startedAt,
     finishedAt,
-    promptInputs: buildPromptInputs({ task, args }),
+    promptInputs: buildPromptInputs({ task, args, taskContextPath }),
     changedFiles: outcome.changedFiles ?? [],
     checks: outcome.checks ?? [],
     summary: outcome.summary ?? '',
@@ -395,10 +397,25 @@ function runLoop(args) {
       writeJsonAtomic(args['run-state'], runState);
 
       try {
+        const taskContext = buildTaskContext({
+          project,
+          prd,
+          taskPlan,
+          taskId: task.id,
+          templatesDir,
+          repoRoot,
+        });
+        const taskContextPath = artifactPath(featureDir, task.id, 'task-context.json');
+        writeJsonAtomic(taskContextPath, taskContext);
+        if (!runState.artifacts.some((artifact) => artifact.type === 'taskContext' && artifact.path === taskContextPath)) {
+          runState.artifacts.push({ type: 'taskContext', path: taskContextPath });
+        }
+
         const outcome = adapter.execute({
           args,
           project,
           prd,
+          taskContext,
           taskPlan,
           runState,
           task,
@@ -431,6 +448,7 @@ function runLoop(args) {
           finishedAt: finishedTaskAt,
           lastIssue,
           args,
+          taskContextPath,
           outcome: {
             ...normalizedOutcome,
             summary: desiredStatus === 'done'
