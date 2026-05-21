@@ -5,6 +5,7 @@ Agent Adapter 是 Run Loop 和具体执行器之间的适配层。它的职责�
 ## 当前实现
 
 - `mock`：默认 adapter。用于验证状态机、异常复跑、review/check/needs_human 分支。
+- `shell`：真实执行一条 `--shell-command`，用于打通真实执行器插槽。
 
 ## Outcome 约定
 
@@ -34,3 +35,15 @@ Adapter 的 `execute(context)` 返回：
 - Run Loop 会校验 outcome；非法 outcome 会被视为 orchestrator/adapter 异常，当前 task 会转为 `needs_human`。
 
 后续真实执行器可以新增为 `codex` 或 `shell` adapter，但仍应保持这个边界。
+
+## Shell Adapter
+
+```bash
+node tools/run-loop/run-feature.mjs \
+  --agent-adapter shell \
+  --shell-command "node -e \"console.log('ok')\""
+```
+
+- 工作目录使用 `taskContext.base.workspaceAbs`。
+- 命令退出码为 0 时，任务进入后续 checks/review。
+- 命令失败或 workspace 不存在时，任务进入 `needs_human`。

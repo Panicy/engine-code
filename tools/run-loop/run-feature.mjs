@@ -27,6 +27,8 @@ function usage() {
     '  --mock-fail-task TASK-001',
     '  --mock-fail-stage check|review|human',
     '  --mock-fail-check CHECK-001',
+    '  --shell-command <command>',
+    '  --shell-timeout-ms 300000',
     '  --owner run-loop',
   ].join('\n');
 }

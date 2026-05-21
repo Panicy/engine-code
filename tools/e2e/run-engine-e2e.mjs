@@ -114,15 +114,27 @@ function featurePaths(baseDir, featureId) {
   };
 }
 
+function writeProjectWithWorkspace(baseDir, fileName, workspace) {
+  const project = readJson(path.resolve(repoRoot, projectPath));
+  project.bases = project.bases.map((base) => ({
+    ...base,
+    workspace,
+  }));
+  const outputPath = path.join(baseDir, fileName);
+  fs.writeFileSync(outputPath, `${JSON.stringify(project, null, 2)}\n`, 'utf8');
+  return outputPath;
+}
+
 function createFeature(baseDir, featureId, options = {}) {
   const paths = featurePaths(baseDir, featureId);
+  paths.projectPath = options.projectPath ?? projectPath;
   fs.mkdirSync(paths.dir, { recursive: true });
   parseCommandJson(runNode([
     'tools/prd-builder/create-prd.mjs',
     '--feature-id', featureId,
     '--name', options.name ?? `E2E-${featureId}`,
     '--summary', options.summary ?? `验证 ${featureId} 流程`,
-    '--project', projectPath,
+    '--project', paths.projectPath,
     '--bases', options.bases ?? 'backend,middle,client',
     '--out', paths.prd,
     '--force',
@@ -137,7 +149,7 @@ function approvePrd(paths) {
 function createTaskPlan(paths) {
   parseCommandJson(runNode([
     'tools/task-planner/create-task-plan.mjs',
-    '--project', projectPath,
+    '--project', paths.projectPath ?? projectPath,
     '--prd', paths.prd,
     '--out', paths.taskPlan,
     '--run-state-out', paths.runState,
@@ -148,7 +160,7 @@ function createTaskPlan(paths) {
 function approveTaskPlan(paths) {
   parseCommandJson(runNode([
     'tools/task-planner/approve-task-plan.mjs',
-    '--project', projectPath,
+    '--project', paths.projectPath ?? projectPath,
     '--prd', paths.prd,
     '--task-plan', paths.taskPlan,
     '--run-state', paths.runState,
@@ -160,7 +172,7 @@ function runLoop(paths, extraArgs = []) {
   const normalizedExtraArgs = extraArgs.includes('--checks-mode') ? extraArgs : ['--checks-mode', 'mock', ...extraArgs];
   return parseCommandJson(runNode([
     'tools/run-loop/run-feature.mjs',
-    '--project', projectPath,
+    '--project', paths.projectPath ?? projectPath,
     '--prd', paths.prd,
     '--task-plan', paths.taskPlan,
     '--run-state', paths.runState,
@@ -170,7 +182,7 @@ function runLoop(paths, extraArgs = []) {
 
 function validateFeature(paths) {
   const report = validateFiles({
-    project: projectPath,
+    project: paths.projectPath ?? projectPath,
     prd: paths.prd,
     'task-plan': paths.taskPlan,
     'run-state': paths.runState,
@@ -326,6 +338,28 @@ function testChecksRunnerRealHttp() {
   assert(result.checks.some((check) => check.id === 'real-http-pass' && check.status === 'passed'), '真实 HTTP 检查应记录 passed');
 }
 
+function testShellAdapterSuccess(baseDir) {
+  const localProjectPath = writeProjectWithWorkspace(baseDir, 'local-workspace-project.json', '.');
+  const paths = prepareApprovedFeature(baseDir, 'shell-adapter-success', { projectPath: localProjectPath });
+  const result = runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "console.log('shell-ok')"`,
+  ]);
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'shell adapter 成功时任务应 done');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].agent.tool === 'shell', 'task-run 应记录 shell agent');
+  assert(taskRun.attempts[0].summary.includes('shell-ok'), 'task-run 应记录 shell 输出摘要');
+}
+
+function testShellAdapterMissingCommand(baseDir) {
+  const localProjectPath = writeProjectWithWorkspace(baseDir, 'local-workspace-project-missing-command.json', '.');
+  const paths = prepareApprovedFeature(baseDir, 'shell-adapter-missing-command', { projectPath: localProjectPath });
+  const result = runLoop(paths, ['--agent-adapter', 'shell']);
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), 'shell adapter 缺少命令时任务应 needsHuman');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].errors.includes('缺少 --shell-command'), 'task-run 应记录缺少命令错误');
+}
+
 function testReviewFailureRetry(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'review-failure-retry');
   const result = runLoop(paths, ['--mock-fail-task', 'TASK-001', '--mock-fail-stage', 'review']);
@@ -356,6 +390,8 @@ const tests = [
   ['Checks Runner 定点失败', testChecksRunnerFailure],
   ['Checks Runner 真实命令', testChecksRunnerRealCommand],
   ['Checks Runner 真实 HTTP', testChecksRunnerRealHttp],
+  ['Shell Adapter 成功执行', testShellAdapterSuccess],
+  ['Shell Adapter 缺少命令', testShellAdapterMissingCommand],
   ['评审失败复跑入口', testReviewFailureRetry],
   ['needs_human 非阻塞状态', testNeedsHuman],
 ];

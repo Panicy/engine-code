@@ -1,7 +1,9 @@
 import { createMockAdapter } from './mock-adapter.mjs';
+import { createShellAdapter } from './shell-adapter.mjs';
 
 const adapterFactories = {
   mock: createMockAdapter,
+  shell: createShellAdapter,
 };
 
 function availableAgentAdapters() {
