@@ -254,6 +254,196 @@ function writeJsonFile(filePath, value) {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
+function backendApiFixture(overrides = {}) {
+  return {
+    schemaVersion: '0.1.0',
+    featureId: 'notice-tags',
+    generatedAt: '2026-05-22T12:00:00+08:00',
+    endpoints: [
+      {
+        id: 'notice-tag-list',
+        method: 'GET',
+        path: '/system/noticeTag/list',
+        description: '分页查询公告标签。',
+        permissionCode: 'system:noticeTag:list',
+        authRequired: true,
+        request: {
+          query: [
+            { name: 'pageNum', type: 'number', required: true, description: '页码。' },
+            { name: 'pageSize', type: 'number', required: true, description: '每页数量。' },
+          ],
+          path: [],
+          bodyType: '',
+        },
+        response: { wrapper: 'TableDataInfo', dataType: 'NoticeTagVo' },
+      },
+      {
+        id: 'notice-tag-add',
+        method: 'POST',
+        path: '/system/noticeTag',
+        description: '新增公告标签。',
+        permissionCode: 'system:noticeTag:add',
+        authRequired: true,
+        request: { query: [], path: [], bodyType: 'NoticeTagBo' },
+        response: { wrapper: 'R', dataType: 'boolean' },
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function permissionManifestFixture(overrides = {}) {
+  return {
+    schemaVersion: '0.1.0',
+    featureId: 'notice-tags',
+    generatedAt: '2026-05-22T12:00:00+08:00',
+    permissions: [
+      {
+        code: 'system:noticeTag:list',
+        action: 'list',
+        backendAnnotation: true,
+        menuSql: true,
+        middleButton: true,
+        targetEndpointIds: ['notice-tag-list'],
+        notes: '公告标签查询权限。',
+      },
+      {
+        code: 'system:noticeTag:add',
+        action: 'add',
+        backendAnnotation: true,
+        menuSql: true,
+        middleButton: true,
+        targetEndpointIds: ['notice-tag-add'],
+        notes: '公告标签新增权限。',
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function writeContractFixtures(baseDir, name, backendApi, permissions) {
+  const dir = path.join(baseDir, 'contracts', name);
+  fs.mkdirSync(dir, { recursive: true });
+  const backendApiPath = path.join(dir, 'backend-api.json');
+  const permissionsPath = path.join(dir, 'permission-manifest.json');
+  writeJsonFile(backendApiPath, backendApi);
+  writeJsonFile(permissionsPath, permissions);
+  return { backendApiPath, permissionsPath };
+}
+
+function runContractsValidator(backendApiPath, permissionsPath, options = {}) {
+  const args = [
+    'tools/contracts/validate-contracts.mjs',
+    '--backend-api', backendApiPath,
+    '--permissions', permissionsPath,
+  ];
+  const result = runNode(args, { expectFailure: options.expectFailure });
+  return { result, report: parseCommandJson(result) };
+}
+
+function assertContractsInvalid(baseDir, name, backendApi, permissions, expectedCode) {
+  const paths = writeContractFixtures(baseDir, name, backendApi, permissions);
+  const { result, report } = runContractsValidator(paths.backendApiPath, paths.permissionsPath, { expectFailure: true });
+  assert(result.status === 1, `${name} 应以 exit 1 表示契约校验失败`);
+  assert(report.valid === false, `${name} report.valid 应为 false`);
+  assert(report.errors.some((item) => item.code === expectedCode), `${name} 应包含错误码 ${expectedCode}`);
+}
+
+function testContractsValidator(baseDir) {
+  const validPaths = writeContractFixtures(baseDir, 'contracts-valid', backendApiFixture(), permissionManifestFixture());
+  const valid = runContractsValidator(validPaths.backendApiPath, validPaths.permissionsPath);
+  assert(valid.report.valid === true, '合法 backend-api 和 permission-manifest 应通过');
+
+  assertContractsInvalid(baseDir, 'contracts-missing-permission', backendApiFixture({
+    endpoints: [
+      ...backendApiFixture().endpoints,
+      {
+        id: 'notice-tag-remove',
+        method: 'DELETE',
+        path: '/system/noticeTag/{id}',
+        description: '删除公告标签。',
+        permissionCode: 'system:noticeTag:remove',
+        authRequired: true,
+        request: { query: [], path: [{ name: 'id', type: 'number', required: true, description: '主键。' }], bodyType: '' },
+        response: { wrapper: 'R', dataType: 'boolean' },
+      },
+    ],
+  }), permissionManifestFixture(), 'API_PERMISSION_NOT_FOUND');
+
+  assertContractsInvalid(baseDir, 'contracts-duplicated-permission', backendApiFixture(), permissionManifestFixture({
+    permissions: [
+      ...permissionManifestFixture().permissions,
+      {
+        code: 'system:noticeTag:list',
+        action: 'query',
+        backendAnnotation: true,
+        menuSql: true,
+        middleButton: false,
+        targetEndpointIds: [],
+        notes: '重复权限码。',
+      },
+    ],
+  }), 'PERMISSION_CODE_DUPLICATED');
+
+  assertContractsInvalid(baseDir, 'contracts-duplicated-operation', backendApiFixture({
+    endpoints: [
+      ...backendApiFixture().endpoints,
+      {
+        ...backendApiFixture().endpoints[0],
+        path: '/system/noticeTag/duplicated-id',
+      },
+    ],
+  }), permissionManifestFixture(), 'API_OPERATION_DUPLICATED');
+
+  assertContractsInvalid(baseDir, 'contracts-duplicated-route', backendApiFixture({
+    endpoints: [
+      ...backendApiFixture().endpoints,
+      {
+        ...backendApiFixture().endpoints[0],
+        id: 'notice-tag-list-copy',
+      },
+    ],
+  }), permissionManifestFixture(), 'API_ROUTE_DUPLICATED');
+
+  assertContractsInvalid(baseDir, 'contracts-target-missing', backendApiFixture(), permissionManifestFixture({
+    permissions: [
+      {
+        ...permissionManifestFixture().permissions[0],
+        targetEndpointIds: ['missing-operation'],
+      },
+      permissionManifestFixture().permissions[1],
+    ],
+  }), 'PERMISSION_TARGET_ENDPOINT_NOT_FOUND');
+
+  assertContractsInvalid(baseDir, 'contracts-target-code-mismatch', backendApiFixture(), permissionManifestFixture({
+    permissions: [
+      {
+        ...permissionManifestFixture().permissions[0],
+        code: 'system:noticeTag:query',
+      },
+      permissionManifestFixture().permissions[1],
+    ],
+  }), 'PERMISSION_TARGET_CODE_MISMATCH');
+
+  assertContractsInvalid(baseDir, 'contracts-schema-invalid-method', backendApiFixture({
+    endpoints: [
+      {
+        ...backendApiFixture().endpoints[0],
+        method: 'OPTIONS',
+      },
+    ],
+  }), permissionManifestFixture(), 'SCHEMA_ENUM_MISMATCH');
+
+  const readFailed = runNode([
+    'tools/contracts/validate-contracts.mjs',
+    '--backend-api', path.join(baseDir, 'missing-backend-api.json'),
+    '--permissions', validPaths.permissionsPath,
+  ], { expectFailure: true });
+  const readFailedReport = parseCommandJson(readFailed);
+  assert(readFailed.status === 2, 'JSON 读取失败应 exit 2');
+  assert(readFailedReport.errors.some((item) => item.code === 'CONTRACTS_READ_FAILED'), 'JSON 读取失败应返回 CONTRACTS_READ_FAILED');
+}
+
 function prepareApprovedFeature(baseDir, featureId, options = {}) {
   if (!options.projectPath) {
     options.projectPath = writeProjectWithWorkspace(baseDir, `${featureId}-project.json`, options.workspace ?? '.');
@@ -1888,6 +2078,7 @@ const tests = [
   ['PRD 人工确认门禁', testApprovalGate],
   ['PRD Builder requirements-file', testPrdBuilderRequirementsFile],
   ['Task Planner rich PRD dependencies', testTaskPlannerRichPrdDependencies],
+  ['跨端契约校验', testContractsValidator],
   ['未知 Agent Adapter 拒绝', testUnknownAgentAdapter],
   ['未知 Checks Mode 拒绝', testUnknownChecksMode],
   ['Run Loop 未知参数拒绝', testRunLoopRejectsUnknownArg],

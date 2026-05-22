@@ -12,16 +12,22 @@
     "generatedAt": { "type": "string", "format": "date-time" },
     "permissions": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["code", "action", "backendAnnotation", "menuSql", "middleButton"],
         "additionalProperties": false,
         "properties": {
-          "code": { "type": "string" },
+          "code": { "type": "string", "minLength": 1 },
           "action": { "type": "string", "enum": ["list", "query", "add", "edit", "remove", "export", "import", "custom"] },
           "backendAnnotation": { "type": "boolean" },
           "menuSql": { "type": "boolean" },
           "middleButton": { "type": "boolean" },
+          "targetEndpointIds": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 },
+            "default": []
+          },
           "notes": { "type": "string", "default": "" }
         }
       }

@@ -9,6 +9,7 @@
       "backendAnnotation": true,
       "menuSql": true,
       "middleButton": true,
+      "targetEndpointIds": ["user-tag-list"],
       "notes": "用户标签列表权限。"
     },
     {
@@ -17,6 +18,7 @@
       "backendAnnotation": true,
       "menuSql": true,
       "middleButton": true,
+      "targetEndpointIds": ["user-tag-create"],
       "notes": "用户标签新增权限。"
     }
   ]

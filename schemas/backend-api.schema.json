@@ -12,15 +12,16 @@
     "generatedAt": { "type": "string", "format": "date-time" },
     "endpoints": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "required": ["id", "method", "path", "description", "authRequired", "response"],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string" },
+          "id": { "type": "string", "minLength": 1 },
           "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"] },
-          "path": { "type": "string" },
-          "description": { "type": "string" },
+          "path": { "type": "string", "pattern": "^/" },
+          "description": { "type": "string", "minLength": 1 },
           "permissionCode": { "type": "string", "default": "" },
           "authRequired": { "type": "boolean" },
           "request": {
@@ -52,8 +53,8 @@
       "required": ["name", "type", "required"],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "type": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
         "required": { "type": "boolean" },
         "description": { "type": "string", "default": "" }
       }

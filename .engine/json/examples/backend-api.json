@@ -32,6 +32,40 @@
         "wrapper": "TableDataInfo",
         "dataType": "UserTagVo"
       }
+    },
+    {
+      "id": "user-tag-create",
+      "method": "POST",
+      "path": "/biz/user-tag",
+      "description": "新增用户标签。",
+      "permissionCode": "biz:userTag:add",
+      "authRequired": true,
+      "request": {
+        "query": [],
+        "path": [],
+        "bodyType": "UserTagBo"
+      },
+      "response": {
+        "wrapper": "R",
+        "dataType": "boolean"
+      }
+    },
+    {
+      "id": "user-tag-public-options",
+      "method": "GET",
+      "path": "/biz/user-tag/options",
+      "description": "查询公开可用的用户标签选项。",
+      "permissionCode": "",
+      "authRequired": false,
+      "request": {
+        "query": [],
+        "path": [],
+        "bodyType": ""
+      },
+      "response": {
+        "wrapper": "R",
+        "dataType": "UserTagOptionVo[]"
+      }
     }
   ]
 }
