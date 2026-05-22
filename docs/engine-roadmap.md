@@ -31,7 +31,7 @@
 | JSON Schema 严格校验工具 | in_progress | `tools/validator/validate-feature.mjs` | 已有轻量 schema 子集校验；后续可替换为 Ajv |
 | 跨文件引用校验器 | in_progress | `tools/validator/validate-feature.mjs` | 已校验 project/template/skill/task/story/check 等主要引用 |
 | 状态一致性校验器 | in_progress | `tools/validator/validate-feature.mjs` | 已校验 run-state 与 task-plan 的 task 覆盖、依赖和状态合法性 |
-| Project 初始化模块 | todo | - | 创建 workspace/project/feature 初始结构 |
+| Project 初始化模块 | in_progress | `tools/project-init/` | 已支持 project.json 生成和 feature 目录骨架初始化，待增强 workspace 注册和模板版本管理 |
 | PRD 生成与确认模块 | in_progress | `tools/prd-builder/` | 已支持规则化生成 PRD 草稿、项目校验、多故事输入和人工确认工具 |
 | Task Plan 生成与确认模块 | in_progress | `tools/task-planner/` | 已支持规则化生成 task-plan 草稿和人工确认工具 |
 | Run Loop 执行器 | in_progress | `tools/run-loop/run-feature.mjs` | 已模块化调度 Skill Context、Agent Adapter、Checks Runner、Review Runner，并写入运行产物 |
@@ -259,12 +259,12 @@
 
 近期建议按以下顺序推进：
 
-1. M5 Project 与 Feature 初始化，降低多项目接入成本。
-2. 异常恢复工具，支持查看 attempts、恢复 needs_human、重跑异常任务。
-3. Codex Agent Adapter，把 task-context 交给真实开发执行器。
-4. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
-5. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
-6. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
+1. 异常恢复工具，支持查看 attempts、恢复 needs_human、重跑异常任务。
+2. Codex Agent Adapter，把 task-context 交给真实开发执行器。
+3. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
+4. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
+5. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
+6. Project Init 增强，补 workspace 注册、模板版本管理和可选 clone 策略。
 
 ## 当前整体架构
 

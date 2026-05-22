@@ -223,6 +223,20 @@ function validateFeature(paths) {
   return report;
 }
 
+function runProjectInitCreateProject(args, options = {}) {
+  return parseCommandJson(runNode(['tools/project-init/create-project.mjs', ...args], options));
+}
+
+function runProjectInitCreateFeature(args, options = {}) {
+  return parseCommandJson(runNode(['tools/project-init/create-feature.mjs', ...args], options));
+}
+
+function createProjectInitWorkspace(baseDir, name) {
+  const workspace = path.join(baseDir, name);
+  fs.mkdirSync(workspace, { recursive: true });
+  return workspace;
+}
+
 function prepareApprovedFeature(baseDir, featureId, options = {}) {
   if (!options.projectPath) {
     options.projectPath = writeProjectWithWorkspace(baseDir, `${featureId}-project.json`, options.workspace ?? '.');
@@ -301,6 +315,208 @@ function testRunLoopRejectsUnknownArg(baseDir) {
     '--shell-changed-files', 'src/unsafe.js',
   ], { expectFailure: true });
   assert(result.stderr.includes('未知参数：--shell-changed-files'), 'Run Loop 应拒绝已删除的 changedFiles 参数');
+}
+
+function testProjectInitCreatesProject(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-legal-workspace');
+  const out = path.join(baseDir, 'project-init-legal.json');
+  const result = runProjectInitCreateProject([
+    '--project-id', 'project-init-legal',
+    '--name', 'Project Init Legal',
+    '--description', 'Project init e2e',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--out', out,
+  ]);
+  assert(result.ok === true, '合法 project 初始化应成功');
+  const project = readJson(out);
+  assert(project.projectId === 'project-init-legal', 'projectId 应写入输出');
+  assert(project.bases[0].workspace === workspace, 'workspace 应写入输出');
+  const report = validateFiles({
+    project: out,
+    prd: path.join(baseDir, 'missing-prd.json'),
+    'task-plan': path.join(baseDir, 'missing-task-plan.json'),
+    'run-state': path.join(baseDir, 'missing-run-state.json'),
+    'templates-dir': templatesDir,
+  });
+  assert(!report.errors.some((item) => item.code === 'SCHEMA_INVALID' && item.file === out), 'project 输出应符合 schema');
+}
+
+function testProjectInitRejectsInvalidRepo(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-invalid-repo-workspace');
+  const result = runNode([
+    'tools/project-init/create-project.mjs',
+    '--project-id', 'project-init-invalid-repo',
+    '--name', 'Invalid Repo',
+    '--base', `backend:backend-starter:not-a-uri:${workspace}`,
+    '--out', path.join(baseDir, 'project-init-invalid-repo.json'),
+  ], { expectFailure: true });
+  assert(result.stderr.includes('repo 不是合法 URI'), '非法 repo URI 应失败');
+}
+
+function testProjectInitRejectsMissingTemplate(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-missing-template-workspace');
+  const result = runNode([
+    'tools/project-init/create-project.mjs',
+    '--project-id', 'project-init-missing-template',
+    '--name', 'Missing Template',
+    '--base', `backend:missing-template:https://example.com/backend.git:${workspace}`,
+    '--out', path.join(baseDir, 'project-init-missing-template.json'),
+  ], { expectFailure: true });
+  assert(result.stderr.includes('templateId 不存在'), 'templateId 不存在应失败');
+}
+
+function testProjectInitRejectsDuplicateBaseId(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-duplicate-base-workspace');
+  const result = runNode([
+    'tools/project-init/create-project.mjs',
+    '--project-id', 'project-init-duplicate-base',
+    '--name', 'Duplicate Base',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--base', `backend:middle-starter:https://example.com/middle.git:${workspace}`,
+    '--out', path.join(baseDir, 'project-init-duplicate-base.json'),
+  ], { expectFailure: true });
+  assert(result.stderr.includes('baseId 不能重复'), 'baseId 重复应失败');
+}
+
+function testProjectInitRejectsMissingWorkspace(baseDir) {
+  const result = runNode([
+    'tools/project-init/create-project.mjs',
+    '--project-id', 'project-init-missing-workspace',
+    '--name', 'Missing Workspace',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${path.join(baseDir, 'missing-workspace')}`,
+    '--out', path.join(baseDir, 'project-init-missing-workspace.json'),
+  ], { expectFailure: true });
+  assert(result.stderr.includes('workspace 不存在'), 'workspace 不存在应失败');
+}
+
+function testProjectInitRefusesAndForcesOverwrite(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-force-workspace');
+  const out = path.join(baseDir, 'project-init-force.json');
+  runProjectInitCreateProject([
+    '--project-id', 'project-init-force',
+    '--name', 'Before Force',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--out', out,
+  ]);
+  const refused = runNode([
+    'tools/project-init/create-project.mjs',
+    '--project-id', 'project-init-force',
+    '--name', 'Refused Force',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--out', out,
+  ], { expectFailure: true });
+  assert(refused.stderr.includes('拒绝覆盖'), 'out 已存在时默认应拒绝覆盖');
+  runProjectInitCreateProject([
+    '--project-id', 'project-init-force',
+    '--name', 'After Force',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--out', out,
+    '--force',
+  ]);
+  assert(readJson(out).name === 'After Force', '--force 应覆盖已有 project 文件');
+}
+
+function testProjectInitCreateFeatureWithPrdApproval(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-feature-workspace');
+  const projectOut = path.join(baseDir, 'project-init-feature-project.json');
+  runProjectInitCreateProject([
+    '--project-id', 'project-init-feature',
+    '--name', 'Project Init Feature',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--out', projectOut,
+  ]);
+  const outDir = path.join(baseDir, 'project-init-feature-out');
+  const result = runProjectInitCreateFeature([
+    '--feature-id', 'project-init-feature',
+    '--name', 'Project Init Feature',
+    '--summary', '验证 feature 初始化',
+    '--project', projectOut,
+    '--bases', 'backend',
+    '--out-dir', outDir,
+    '--approve-prd-by', 'e2e',
+  ]);
+  assert(result.ok === true, 'feature 初始化应成功');
+  assert(fs.existsSync(path.join(outDir, 'prd.json')), 'feature 初始化应生成 prd.json');
+  assert(fs.existsSync(path.join(outDir, 'task-plan.json')), 'approve PRD 后应生成 task-plan.json');
+  assert(fs.existsSync(path.join(outDir, 'run-state.json')), 'approve PRD 后应生成 run-state.json');
+  assert(result.validationPassed === false, '未 approve task-plan 时 validator 应报告未完全通过但命令不失败');
+}
+
+function testProjectInitCreateFeatureDefaultDraftOnly(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-feature-draft-workspace');
+  const projectOut = path.join(baseDir, 'project-init-feature-draft-project.json');
+  runProjectInitCreateProject([
+    '--project-id', 'project-init-feature-draft',
+    '--name', 'Project Init Feature Draft',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--out', projectOut,
+  ]);
+  const outDir = path.join(baseDir, 'project-init-feature-draft-out');
+  const result = runProjectInitCreateFeature([
+    '--feature-id', 'project-init-feature-draft',
+    '--name', 'Project Init Feature Draft',
+    '--summary', '验证默认不确认',
+    '--project', projectOut,
+    '--bases', 'backend',
+    '--out-dir', outDir,
+  ]);
+  assert(fs.existsSync(path.join(outDir, 'prd.json')), '默认应生成 draft prd.json');
+  assert(!fs.existsSync(path.join(outDir, 'task-plan.json')), '默认不自动 approve 时不应生成 task-plan.json');
+  assert(!fs.existsSync(path.join(outDir, 'run-state.json')), '默认不自动 approve 时不应生成 run-state.json');
+  assert(result.taskPlanPath === null && result.runStatePath === null, '默认 draft-only 输出应明确标记 task-plan/run-state 为空');
+}
+
+function testProjectInitCreateFeatureRejectsTaskPlanApprovalWithoutPrdApproval(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-feature-task-plan-only-workspace');
+  const projectOut = path.join(baseDir, 'project-init-feature-task-plan-only-project.json');
+  runProjectInitCreateProject([
+    '--project-id', 'project-init-feature-task-plan-only',
+    '--name', 'Project Init Feature Task Plan Only',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--out', projectOut,
+  ]);
+  const result = runNode([
+    'tools/project-init/create-feature.mjs',
+    '--feature-id', 'project-init-feature-task-plan-only',
+    '--name', 'Project Init Feature Task Plan Only',
+    '--summary', '验证 task-plan 不能单独确认',
+    '--project', projectOut,
+    '--bases', 'backend',
+    '--out-dir', path.join(baseDir, 'project-init-feature-task-plan-only-out'),
+    '--approve-task-plan-by', 'e2e',
+  ], { expectFailure: true });
+  assert(result.stderr.includes('--approve-task-plan-by 需要同时提供 --approve-prd-by'), 'task-plan 确认必须显式依赖 PRD 确认');
+}
+
+function testProjectInitCreateFeatureApprovedValidates(baseDir) {
+  const workspace = createProjectInitWorkspace(baseDir, 'project-init-feature-approved-workspace');
+  const projectOut = path.join(baseDir, 'project-init-feature-approved-project.json');
+  runProjectInitCreateProject([
+    '--project-id', 'project-init-feature-approved',
+    '--name', 'Project Init Feature Approved',
+    '--base', `backend:backend-starter:https://example.com/backend.git:${workspace}`,
+    '--out', projectOut,
+  ]);
+  const outDir = path.join(baseDir, 'project-init-feature-approved-out');
+  const result = runProjectInitCreateFeature([
+    '--feature-id', 'project-init-feature-approved',
+    '--name', 'Project Init Feature Approved',
+    '--summary', '验证 feature 显式确认',
+    '--project', projectOut,
+    '--bases', 'backend',
+    '--out-dir', outDir,
+    '--approve-prd-by', 'e2e',
+    '--approve-task-plan-by', 'e2e',
+  ]);
+  assert(result.validationPassed === true, '显式 approve 后 validate-feature 应通过');
+  const report = validateFiles({
+    project: projectOut,
+    prd: path.join(outDir, 'prd.json'),
+    'task-plan': path.join(outDir, 'task-plan.json'),
+    'run-state': path.join(outDir, 'run-state.json'),
+    'templates-dir': templatesDir,
+  });
+  assert(report.valid, `显式 approve 后 validate-feature 应通过：${JSON.stringify(report, null, 2)}`);
 }
 
 function testMaxTasksPause(baseDir) {
@@ -656,6 +872,16 @@ const tests = [
   ['未知 Agent Adapter 拒绝', testUnknownAgentAdapter],
   ['未知 Checks Mode 拒绝', testUnknownChecksMode],
   ['Run Loop 未知参数拒绝', testRunLoopRejectsUnknownArg],
+  ['Project Init 合法 project 初始化', testProjectInitCreatesProject],
+  ['Project Init 非法 repo URI 失败', testProjectInitRejectsInvalidRepo],
+  ['Project Init templateId 不存在失败', testProjectInitRejectsMissingTemplate],
+  ['Project Init baseId 重复失败', testProjectInitRejectsDuplicateBaseId],
+  ['Project Init workspace 不存在失败', testProjectInitRejectsMissingWorkspace],
+  ['Project Init out 已存在拒绝和 force 覆盖', testProjectInitRefusesAndForcesOverwrite],
+  ['Project Init feature 默认只生成 draft PRD', testProjectInitCreateFeatureDefaultDraftOnly],
+  ['Project Init feature 拒绝单独确认 task-plan', testProjectInitCreateFeatureRejectsTaskPlanApprovalWithoutPrdApproval],
+  ['Project Init feature 生成 prd/task-plan/run-state', testProjectInitCreateFeatureWithPrdApproval],
+  ['Project Init feature 显式 approve 后校验通过', testProjectInitCreateFeatureApprovedValidates],
   ['完整主流程', testHappyPath],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],
