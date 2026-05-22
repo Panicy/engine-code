@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validateSchema } from '../validator/validate-feature.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -382,6 +383,21 @@ function writeJson(filePath, value) {
   return abs;
 }
 
+function validatePrdSchema(prd, outputPath) {
+  const schemaPath = path.resolve(repoRoot, 'schemas/prd.schema.json');
+  const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
+  const errors = validateSchema(prd, schema, {
+    file: path.resolve(repoRoot, outputPath),
+    rootSchema: schema,
+  });
+  if (errors.length === 0) return;
+
+  const details = errors
+    .map((item) => `${item.path}: ${item.message}`)
+    .join('\n');
+  throw new Error(`PRD schema validation failed\n${details}`);
+}
+
 function main() {
   let args;
   try {
@@ -391,6 +407,7 @@ function main() {
       return;
     }
     const prd = buildPrd(args);
+    validatePrdSchema(prd, args.out);
     prd.__force = args.force === true;
     const outputPath = writeJson(args.out, prd);
     console.log(JSON.stringify({

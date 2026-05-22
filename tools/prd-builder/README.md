@@ -75,7 +75,9 @@ node tools/prd-builder/create-prd.mjs \
 - `risks`
 - `constraints.security` / `ux` / `performance` / `quality`
 
-缺少 ID 时会自动补齐稳定 ID，例如 `US-001`、`AC-001`、`BR-001`、`DE-001`、`PERM-001`、`ASM-001`、`Q-001`、`RISK-001`。`requirements.json` 中的必填文本字段会在生成前校验，例如 `userStories[].story`、`dataEntities[].fields[].type`、`permissions[].code`、`openQuestions[].question` 缺失时会直接失败并提示字段位置。`permissions[].targetBaseId` 必须存在于 `project.bases` 或 PRD 的 `impactedBaseIds` 中，否则生成失败。
+缺少 ID 时会自动补齐稳定 ID，例如 `US-001`、`AC-001`、`BR-001`、`DE-001`、`PERM-001`、`ASM-001`、`Q-001`、`RISK-001`。`requirements.json` 中的必填文本字段会在生成前校验，例如 `personas[].name`、`userStories[].story`、`dataEntities[].fields[].type`、`permissions[].code`、`openQuestions[].question` 缺失时会直接失败并提示字段位置。`permissions[].targetBaseId` 必须存在于 `project.bases` 或 PRD 的 `impactedBaseIds` 中，否则生成失败。
+
+PRD Builder 在写入文件前会对最终 PRD object 执行 `schemas/prd.schema.json` 兜底校验。校验失败时命令会失败并输出 `PRD schema validation failed`、具体 JSON path 和错误信息，同时不会写出无效 PRD。
 
 最小示例：
 
@@ -83,6 +85,17 @@ node tools/prd-builder/create-prd.mjs \
 {
   "impactedBaseIds": ["backend", "middle", "client"],
   "goals": ["管理员可以维护用户标签。"],
+  "personas": [
+    {
+      "id": "admin-user",
+      "name": "后台管理员",
+      "description": "负责维护用户标签配置的人。"
+    },
+    {
+      "name": "业务用户",
+      "description": "需要查看用户标签结果的人。"
+    }
+  ],
   "userStories": [
     {
       "title": "管理员维护用户标签",

@@ -284,6 +284,17 @@ function writeRichRequirements(baseDir, overrides = {}) {
     impactedBaseIds: ['client', 'backend', 'middle'],
     goals: ['管理员可以维护公告标签。'],
     nonGoals: ['不实现公告智能推荐。'],
+    personas: [
+      {
+        id: 'admin-user',
+        name: '后台管理员',
+        description: '负责维护公告标签和公告分类的人。',
+      },
+      {
+        name: '业务用户',
+        description: '在客户端查看公告并识别公告类型的人。',
+      },
+    ],
     userStories: [
       {
         title: '管理员维护公告标签',
@@ -366,6 +377,7 @@ function createPrdFromRequirements(baseDir, featureId, requirementsPath) {
 
 function assertInvalidRequirements(baseDir, featureId, requirements, expectedMessage) {
   const requirementsPath = writeRichRequirements(baseDir, requirements);
+  const outPath = path.join(baseDir, `${featureId}.json`);
   const result = runNode([
     'tools/prd-builder/create-prd.mjs',
     '--feature-id', featureId,
@@ -373,10 +385,30 @@ function assertInvalidRequirements(baseDir, featureId, requirements, expectedMes
     '--summary', '验证 requirements 必填字段校验',
     '--project', projectPath,
     '--requirements-file', requirementsPath,
-    '--out', path.join(baseDir, `${featureId}.json`),
+    '--out', outPath,
     '--force',
   ], { expectFailure: true });
   assert(result.stderr.includes(expectedMessage), `requirements 缺失必填字段时错误应包含：${expectedMessage}`);
+  assert(!fs.existsSync(outPath), 'requirements 校验失败时不应写出 PRD');
+}
+
+function assertInvalidPrdSchema(baseDir) {
+  const outPath = path.join(baseDir, 'invalid-schema-prd.json');
+  const result = runNode([
+    'tools/prd-builder/create-prd.mjs',
+    '--feature-id', 'invalid-schema-prd',
+    '--prd-id', 'bad-prd-id',
+    '--name', 'Invalid Schema PRD',
+    '--summary', '验证 PRD Builder 落盘前 schema 校验',
+    '--project', projectPath,
+    '--bases', 'backend',
+    '--out', outPath,
+    '--force',
+  ], { expectFailure: true });
+  assert(result.stderr.includes('PRD schema validation failed'), 'PRD schema 校验失败时应输出统一错误前缀');
+  assert(result.stderr.includes('$.prdId'), 'PRD schema 校验失败时应包含具体 JSON path');
+  assert(result.stderr.includes('字段值不符合格式'), 'PRD schema 校验失败时应包含具体错误信息');
+  assert(!fs.existsSync(outPath), 'PRD schema 校验失败时不应写出坏 PRD');
 }
 
 function testPrdBuilderRequirementsFile(baseDir) {
@@ -385,6 +417,9 @@ function testPrdBuilderRequirementsFile(baseDir) {
   const prd = readJson(prdPath);
   assert(prd.status === 'draft' && prd.humanApproval.approved === false, 'requirements-file 生成 PRD 仍应是 draft');
   assert(prd.impactedBaseIds.join(',') === 'client,backend,middle', 'requirements-file 应填充 impactedBaseIds');
+  assert(prd.personas.length === 2, 'requirements-file 应填充 personas');
+  assert(prd.personas[0].id === 'admin-user' && prd.personas[0].name === '后台管理员', 'personas 应保留输入 ID 和内容');
+  assert(prd.personas[1].id === 'persona-2' && prd.personas[1].name === '业务用户', 'personas 缺 ID 时应自动补齐稳定 ID');
   assert(prd.userStories.map((story) => story.id).join(',') === 'US-001,US-002', 'userStories 应自动补齐稳定 ID');
   assert(prd.userStories[0].acceptanceCriteria[0].id === 'AC-001', 'acceptanceCriteria 应自动补齐稳定 ID');
   assert(prd.businessRules[0].id === 'BR-001', 'businessRules 应自动补齐稳定 ID');
@@ -450,6 +485,24 @@ function testPrdBuilderRequirementsFile(baseDir) {
       },
     ],
   }, 'permissions[1].code 必须是非空字符串');
+  assertInvalidRequirements(baseDir, 'requirements-missing-persona-name', {
+    personas: [
+      {
+        id: 'broken-persona',
+        description: '缺少 name 的 persona。',
+      },
+    ],
+  }, 'personas[1].name 必须是非空字符串');
+  assertInvalidRequirements(baseDir, 'requirements-invalid-persona-name', {
+    personas: [
+      {
+        id: 'broken-persona',
+        name: 123,
+        description: 'name 类型错误的 persona。',
+      },
+    ],
+  }, 'personas[1].name 必须是非空字符串');
+  assertInvalidPrdSchema(baseDir);
 }
 
 function testTaskPlannerRichPrdDependencies(baseDir) {
