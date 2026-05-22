@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validateFiles } from '../validator/validate-feature.mjs';
 import { runChecks } from '../checks-runner/index.mjs';
+import { runReview } from '../review-runner/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -385,6 +386,82 @@ function testChecksRunnerRealHttp() {
   assert(result.checks.some((check) => check.id === 'real-http-pass' && check.status === 'passed'), '真实 HTTP 检查应记录 passed');
 }
 
+function reviewFixture({ allowedPaths, changedFiles, outcomeChangedFiles = [] }) {
+  return runReview({
+    runState: { runId: 'RUN-E2E' },
+    reviewedAt: '2026-05-22T00:00:00.000Z',
+    taskContext: {
+      task: {
+        id: 'TASK-001',
+        title: 'Review fixture',
+        allowedPaths,
+        acceptanceCriteria: [{ id: 'AC-001', text: 'fixture passes' }],
+      },
+      executionHints: {
+        allowedPaths,
+        checks: [],
+      },
+    },
+    outcome: {
+      requestedStatus: 'done',
+      reviewVerdict: 'pass',
+      checks: [],
+      changedFiles: outcomeChangedFiles,
+    },
+    taskRun: {
+      attempts: [{ attempt: 1, changedFiles }],
+    },
+  });
+}
+
+function testReviewAllowedPathsPass() {
+  const review = reviewFixture({
+    allowedPaths: ['src/pages/notice/**', 'src/config.ts'],
+    changedFiles: ['src/pages/notice/index.vue', 'src/config.ts'],
+  });
+  assert(review.verdict === 'pass', 'changedFiles 全部命中 allowedPaths 时 review 应通过');
+  assert(review.scopeFindings.length === 0, 'allowedPaths 全部命中时不应有 scopeFindings');
+}
+
+function testReviewAllowedPathsFail() {
+  const review = reviewFixture({
+    allowedPaths: ['src/pages/notice/**'],
+    changedFiles: ['src/pages/user/index.vue'],
+  });
+  assert(review.verdict === 'fail', 'changedFiles 越界时 review 应失败');
+  assert(review.scopeFindings.length === 1, '单个越界文件应生成 1 条 scopeFinding');
+  assert(review.scopeFindings[0].file === 'src/pages/user/index.vue', 'scopeFinding 应包含违规文件路径');
+  assert(review.scopeFindings[0].description.includes('src/pages/notice/**'), 'scopeFinding 应包含允许范围');
+}
+
+function testReviewAllowedPathsGlobBoundary() {
+  const review = reviewFixture({
+    allowedPaths: ['src/pages/notice/**'],
+    changedFiles: ['src/pages/noticeboard/index.vue'],
+  });
+  assert(review.verdict === 'fail', '/** 规则不应误匹配同名前缀目录');
+  assert(review.scopeFindings[0].file === 'src/pages/noticeboard/index.vue', '/** 边界失败应记录违规文件');
+}
+
+function testReviewAllowedPathsPartialFail() {
+  const review = reviewFixture({
+    allowedPaths: ['src/pages/notice/**', 'src/config.ts'],
+    changedFiles: ['src/pages/notice/index.vue', 'src/config.ts', 'src/pages/user/index.vue', 'README.md'],
+  });
+  assert(review.verdict === 'fail', '多文件部分越界时 review 应失败');
+  assert(review.scopeFindings.map((finding) => finding.file).join(',') === 'src/pages/user/index.vue,README.md', 'scopeFindings 应精确列出越界文件');
+}
+
+function testReviewAllowedPathsEmptyChangedFiles() {
+  const review = reviewFixture({
+    allowedPaths: [],
+    changedFiles: [],
+    outcomeChangedFiles: ['unsafe/from-adapter.txt'],
+  });
+  assert(review.verdict === 'pass', 'changedFiles 为空时不应因 scope 审查失败');
+  assert(review.scopeFindings.length === 0, 'changedFiles 为空时不应生成 scopeFindings');
+}
+
 function testShellAdapterSuccess(baseDir) {
   const localProjectPath = writeProjectWithWorkspace(baseDir, 'local-workspace-project.json', '.');
   const paths = prepareApprovedFeature(baseDir, 'shell-adapter-success', { projectPath: localProjectPath });
@@ -405,9 +482,19 @@ function prepareGitDiffFeature(baseDir, featureId, files = {}) {
   return prepareApprovedFeature(baseDir, featureId, { projectPath: localProjectPath, bases: 'backend' });
 }
 
+function setFirstTaskAllowedPaths(paths, allowedPaths) {
+  const taskPlan = readJson(paths.taskPlan);
+  taskPlan.storyGroups[0].tasks[0].allowedPaths = allowedPaths;
+  fs.writeFileSync(paths.taskPlan, `${JSON.stringify(taskPlan, null, 2)}\n`, 'utf8');
+}
+
 function firstAttemptChangedFiles(paths) {
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   return taskRun.attempts[0].changedFiles;
+}
+
+function firstReview(paths) {
+  return readJson(path.join(paths.dir, 'runs', 'TASK-001', 'review.json'));
 }
 
 function testGitDiffCollectsModifiedFile(baseDir) {
@@ -476,6 +563,34 @@ function testGitDiffRequiresGitWorkspace(baseDir) {
   assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), '非 git workspace 应进入 needsHuman');
   const runState = readJson(paths.runState);
   assert(runState.taskStates['TASK-001'].lastIssue.summary.includes('不是 git 仓库'), '非 git workspace 应记录明确失败原因');
+}
+
+function testRunLoopAllowedPathShellPass(baseDir) {
+  const paths = prepareGitDiffFeature(baseDir, 'run-loop-allowed-path-pass', { 'src/pages/notice/index.vue': 'before\n' });
+  setFirstTaskAllowedPaths(paths, ['src/pages/notice/**']);
+  const result = runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "require('fs').writeFileSync('src/pages/notice/index.vue','after\\n')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'shell 修改允许路径时任务应 done');
+  const review = firstReview(paths);
+  assert(review.verdict === 'pass', 'shell 修改允许路径时 review 应 pass');
+  assert(review.scopeFindings.length === 0, 'shell 修改允许路径时不应有 scopeFindings');
+}
+
+function testRunLoopOutOfScopeShellFail(baseDir) {
+  const paths = prepareGitDiffFeature(baseDir, 'run-loop-out-of-scope-fail', { 'src/pages/user/index.vue': 'before\n' });
+  setFirstTaskAllowedPaths(paths, ['src/pages/notice/**']);
+  const result = runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "require('fs').writeFileSync('src/pages/user/index.vue','after\\n')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.reviewFailed.includes('TASK-001'), 'shell 修改越界路径时任务应 review_failed');
+  const review = firstReview(paths);
+  assert(review.verdict === 'fail', 'shell 修改越界路径时 review 应 fail');
+  assert(review.scopeFindings.map((finding) => finding.file).join(',') === 'src/pages/user/index.vue', 'shell 越界 review 应精确列出违规文件');
 }
 
 function testRealChecksUseBaseWorkspace(baseDir) {
@@ -547,6 +662,11 @@ const tests = [
   ['Checks Runner 定点失败', testChecksRunnerFailure],
   ['Checks Runner 真实命令', testChecksRunnerRealCommand],
   ['Checks Runner 真实 HTTP', testChecksRunnerRealHttp],
+  ['Review Runner allowedPaths 全命中', testReviewAllowedPathsPass],
+  ['Review Runner allowedPaths 越界失败', testReviewAllowedPathsFail],
+  ['Review Runner allowedPaths 目录边界', testReviewAllowedPathsGlobBoundary],
+  ['Review Runner allowedPaths 部分越界', testReviewAllowedPathsPartialFail],
+  ['Review Runner changedFiles 为空不失败', testReviewAllowedPathsEmptyChangedFiles],
   ['Shell Adapter 成功执行', testShellAdapterSuccess],
   ['Git Diff Collector 采集修改文件', testGitDiffCollectsModifiedFile],
   ['Git Diff Collector 采集新增文件', testGitDiffCollectsAddedFile],
@@ -554,6 +674,8 @@ const tests = [
   ['Git Diff Collector 采集删除文件', testGitDiffCollectsDeletedFile],
   ['Git Diff Collector 忽略恢复文件', testGitDiffIgnoresRestoredFile],
   ['Git Diff Collector 要求 git workspace', testGitDiffRequiresGitWorkspace],
+  ['Run Loop shell 修改允许路径通过', testRunLoopAllowedPathShellPass],
+  ['Run Loop shell 修改越界路径失败', testRunLoopOutOfScopeShellFail],
   ['Run Loop 真实检查使用基座目录', testRealChecksUseBaseWorkspace],
   ['Shell Adapter 缺少命令', testShellAdapterMissingCommand],
   ['评审失败复跑入口', testReviewFailureRetry],

@@ -38,7 +38,7 @@
 | Skill Context | done | `tools/skill-context/` | 已能为单个 task 装配 project/base/template/PRD/task/skill 上下文 |
 | Agent Adapter | in_progress | `tools/agent-adapters/` | 已支持 `mock` 和 `shell`，待接入真实 Codex adapter |
 | Checks Runner | in_progress | `tools/checks-runner/` | 默认真实执行 command/http checks，支持 mock 回归模式 |
-| Review Runner | in_progress | `tools/review-runner/` | 已支持必需 checks 的确定性审查；待基于可信 changedFiles 恢复 allowedPaths 审查并增强语义审查 |
+| Review Runner | in_progress | `tools/review-runner/` | 已支持必需 checks 和基于可信 changedFiles 的 allowedPaths 审查，待增强语义审查 |
 | 运行产物写入器 | in_progress | `tools/run-loop/run-feature.mjs` | 已原子写入 task-context/task-run/review/run-state/loop-summary，待抽成独立模块 |
 | 数据库变更执行辅助 | todo | - | 从 database-changes 到 SQL 检查、菜单权限 SQL 检查 |
 | 跨端契约生成与消费 | todo | - | backend-api、permission-manifest 的生成、校验和消费 |
@@ -160,11 +160,11 @@
 
 任务：
 
-- [ ] 检查 git diff changedFiles 是否匹配 allowedPaths。
+- [x] 检查 git diff changedFiles 是否匹配 allowedPaths。
 - [ ] 检查 expectedChangedFiles 是否合理。
 - [x] 生成 task acceptanceCriteria 级 review 结果。
 - [ ] 检查 skill qualityGates。
-- [ ] 基于 git diff 识别越界改动。
+- [x] 基于 git diff 识别越界改动。
 - [ ] 识别高风险改动并返回 needs_human。
 - [x] 写入 review.json。
 - [x] 自动读取 git diff，避免依赖 adapter 自报 changedFiles。
@@ -259,12 +259,12 @@
 
 近期建议按以下顺序推进：
 
-1. 基于可信 changedFiles 恢复 Review Runner allowedPaths 审查。
-2. M5 Project 与 Feature 初始化，降低多项目接入成本。
+1. M5 Project 与 Feature 初始化，降低多项目接入成本。
+2. 异常恢复工具，支持查看 attempts、恢复 needs_human、重跑异常任务。
 3. Codex Agent Adapter，把 task-context 交给真实开发执行器。
 4. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
 5. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
-6. 异常恢复工具，支持查看 attempts、恢复 needs_human、重跑异常任务。
+6. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
 
 ## 当前整体架构
 
@@ -288,13 +288,13 @@ JSON Contracts
 
 ## 当前架构缺陷
 
-1. **Review Runner 尚未恢复 allowedPaths 审查**
-
-   已删除 adapter 自报 changedFiles 的审查入口，避免把不可信输入当作安全依据。Run Loop 已从目标基座 git diff 自动采集真实改动；下一步应将其作为 allowedPaths review 的唯一可信输入。
-
-2. **Project/Workspace 管理仍然缺位**
+1. **Project/Workspace 管理仍然缺位**
 
    多项目 schema 已有，但缺初始化、注册、路径校验、模板版本校验和 git 状态检查工具。真实项目接入时容易靠人工拼 JSON，出错成本高。
+
+2. **异常恢复能力仍偏弱**
+
+   Run Loop 已能把 `checks_failed`、`review_failed`、`needs_human` 标出来，但缺少面向操作者的恢复命令、异常列表、attempts 查看和人工恢复记录。
 
 3. **Agent Adapter 还没有真正的 Codex 执行器**
 

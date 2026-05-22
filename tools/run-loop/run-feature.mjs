@@ -511,8 +511,9 @@ function runLoop(args) {
         });
         const checkedOutcome = normalizeOutcomeWithChecks({ outcome, checkResult });
         const finishedTaskAt = nowIso();
+        const reviewTaskRun = { attempts: [{ attempt: state.attempts, changedFiles }] };
         const review = checkedOutcome.requestedStatus === 'done'
-          ? runReview({ runState, taskContext, outcome: checkedOutcome, reviewedAt: finishedTaskAt })
+          ? runReview({ runState, taskContext, outcome: checkedOutcome, reviewedAt: finishedTaskAt, taskRun: reviewTaskRun })
           : null;
         const normalizedOutcome = normalizeOutcomeWithReview({ outcome: checkedOutcome, review });
         const desiredStatus = retryAwareStatus(state, normalizedOutcome.requestedStatus);
@@ -550,7 +551,7 @@ function runLoop(args) {
         }
 
         if (review || normalizedOutcome.reviewVerdict) {
-          const reviewArtifact = review ?? runReview({ runState, taskContext, outcome: normalizedOutcome, reviewedAt: finishedTaskAt });
+          const reviewArtifact = review ?? runReview({ runState, taskContext, outcome: normalizedOutcome, reviewedAt: finishedTaskAt, taskRun: reviewTaskRun });
           const reviewPath = artifactPath(featureDir, task.id, 'review.json');
           schemaValidateArtifact('review', reviewArtifact, reviewPath);
           writeJsonAtomic(reviewPath, reviewArtifact);

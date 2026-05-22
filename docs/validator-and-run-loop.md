@@ -494,13 +494,14 @@ Reviewer 必须检查：
 
 当前已实现：
 
+- 检查 changedFiles 是否全部匹配 task.allowedPaths。
 - 检查必需 checks 是否都有结果且为 passed。
 - 写入标准 review.json。
 - review 失败时让 task 进入 review_failed，下一轮可重跑。
 
 当前缺口：
 
-- 不接受 adapter 自报 changedFiles 作为审查依据；Run Loop 已能从 git diff 采集，但 Review Runner 尚未恢复 allowedPaths 审查。
+- 不接受 adapter 自报 changedFiles 作为审查依据；只使用 Run Loop 从 git diff 采集的可信 changedFiles。
 - 未读取真实文件内容。
 - 未检查 skill qualityGates。
 - 未做后端/中台/客户端专项规则。

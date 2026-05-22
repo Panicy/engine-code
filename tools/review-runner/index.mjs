@@ -27,6 +27,48 @@ function reviewChecks(taskContext, checks) {
   return findings;
 }
 
+function normalizePathForReview(filePath) {
+  return String(filePath ?? '').replaceAll('\\', '/').replace(/^\.\/+/, '');
+}
+
+function allowedPathMatches(changedFile, allowedPath) {
+  const filePath = normalizePathForReview(changedFile);
+  const rule = normalizePathForReview(allowedPath);
+  if (!filePath || !rule) return false;
+  if (rule.endsWith('/**')) {
+    const dir = rule.slice(0, -3);
+    return filePath === dir || filePath.startsWith(`${dir}/`);
+  }
+  if (rule.endsWith('/')) return filePath.startsWith(rule);
+  return filePath === rule;
+}
+
+function latestAttemptChangedFiles(taskRun) {
+  const attempts = taskRun?.attempts ?? [];
+  const latest = attempts.reduce((current, attempt) => {
+    if (!current) return attempt;
+    return attempt.attempt > current.attempt ? attempt : current;
+  }, null);
+  return latest?.changedFiles ?? [];
+}
+
+function reviewScope(taskContext, taskRun) {
+  const changedFiles = latestAttemptChangedFiles(taskRun).map(normalizePathForReview).filter(Boolean);
+  if (changedFiles.length === 0) return [];
+  const allowedPaths = taskContext.executionHints?.allowedPaths ?? taskContext.task.allowedPaths ?? [];
+  const findings = [];
+  for (const changedFile of changedFiles) {
+    if (allowedPaths.some((allowedPath) => allowedPathMatches(changedFile, allowedPath))) continue;
+    findings.push({
+      severity: 'high',
+      description: `文件 ${changedFile} 不在 allowedPaths 允许范围内。允许范围：${allowedPaths.length > 0 ? allowedPaths.join(', ') : '(空)'}`,
+      file: changedFile,
+      line: null,
+    });
+  }
+  return findings;
+}
+
 function criteriaResults(taskContext, findings) {
   const criteria = taskContext.task.acceptanceCriteria ?? [{ id: 'AC-001', text: taskContext.task.title }];
   const status = findings.some((finding) => finding.severity === 'high') ? 'fail' : findings.length > 0 ? 'unclear' : 'pass';
@@ -40,7 +82,7 @@ function criteriaResults(taskContext, findings) {
   }));
 }
 
-function runReview({ runState, taskContext, outcome, reviewedAt }) {
+function runReview({ runState, taskContext, outcome, reviewedAt, taskRun }) {
   if (outcome.reviewVerdict === 'fail' || outcome.reviewVerdict === 'needs_human') {
     const verdict = outcome.reviewVerdict;
     const finding = {
@@ -64,7 +106,7 @@ function runReview({ runState, taskContext, outcome, reviewedAt }) {
       summary: outcome.summary || `Review Runner received adapter verdict ${verdict} for ${taskContext.task.id}`,
     };
   }
-  const scopeFindings = [];
+  const scopeFindings = reviewScope(taskContext, taskRun);
   const testFindings = reviewChecks(taskContext, outcome.checks ?? []);
   const architectureFindings = [];
   const findings = [...scopeFindings, ...testFindings, ...architectureFindings];

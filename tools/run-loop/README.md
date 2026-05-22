@@ -89,10 +89,11 @@ node tools/run-loop/run-feature.mjs \
 Run Loop 会在 adapter 成功且 checks 通过后运行 Review Runner。当前 review 会校验：
 
 - 必需 checks 是否都有结果且为 `passed`。
+- `changedFiles` 是否全部落在 task 的 `allowedPaths` 内。
 
 Review 失败时，任务进入 `review_failed`，并写入 `runs/<taskId>/review.json`。
 
-注意：Review Runner 暂不执行 allowedPaths 审查；`changedFiles` 已改为由 git diff 采集，下一步可以基于该可信输入恢复 allowedPaths 审查。
+注意：Review Runner 只使用 Run Loop 从 git diff 采集的可信 `changedFiles`，不接受 adapter 自报的 `changedFiles`。
 
 ## Mock 失败
 
