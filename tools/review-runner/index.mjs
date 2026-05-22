@@ -1,73 +1,3 @@
-import path from 'node:path';
-
-function toPosixPath(filePath) {
-  return filePath.replace(/\\/g, '/').split(path.sep).join('/');
-}
-
-function escapeRegex(value) {
-  return value.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
-}
-
-function globToRegex(pattern) {
-  const normalized = toPosixPath(pattern);
-  let source = '';
-  for (let i = 0; i < normalized.length; i += 1) {
-    const char = normalized[i];
-    const next = normalized[i + 1];
-    if (char === '*' && next === '*') {
-      source += '.*';
-      i += 1;
-      continue;
-    }
-    if (char === '*') {
-      source += '[^/]*';
-      continue;
-    }
-    source += escapeRegex(char);
-  }
-  return new RegExp(`^${source}$`);
-}
-
-function normalizeChangedFile(filePath, baseWorkspace) {
-  if (!filePath) return '';
-  if (path.isAbsolute(filePath)) {
-    const relative = path.relative(baseWorkspace, filePath);
-    return toPosixPath(relative);
-  }
-  return toPosixPath(filePath);
-}
-
-function matchesAnyPattern(filePath, patterns) {
-  return patterns.some((pattern) => globToRegex(pattern).test(filePath));
-}
-
-function reviewChangedFiles(taskContext, changedFiles) {
-  const allowedPaths = taskContext.executionHints.allowedPaths ?? [];
-  const baseWorkspace = taskContext.base.workspaceAbs;
-  const findings = [];
-  for (const file of changedFiles ?? []) {
-    const normalized = normalizeChangedFile(file, baseWorkspace);
-    if (normalized.startsWith('../') || normalized === '..') {
-      findings.push({
-        severity: 'high',
-        description: `改动文件位于 base workspace 外：${file}`,
-        file,
-        line: null,
-      });
-      continue;
-    }
-    if (allowedPaths.length > 0 && !matchesAnyPattern(normalized, allowedPaths)) {
-      findings.push({
-        severity: 'high',
-        description: `改动文件不在 task.allowedPaths 内：${normalized}`,
-        file: normalized,
-        line: null,
-      });
-    }
-  }
-  return findings;
-}
-
 function reviewChecks(taskContext, checks) {
   const requiredById = new Map((taskContext.executionHints.checks ?? []).map((check) => [check.id, check.required !== false]));
   const findings = [];
@@ -134,7 +64,7 @@ function runReview({ runState, taskContext, outcome, reviewedAt }) {
       summary: outcome.summary || `Review Runner received adapter verdict ${verdict} for ${taskContext.task.id}`,
     };
   }
-  const scopeFindings = reviewChangedFiles(taskContext, outcome.changedFiles ?? []);
+  const scopeFindings = [];
   const testFindings = reviewChecks(taskContext, outcome.checks ?? []);
   const architectureFindings = [];
   const findings = [...scopeFindings, ...testFindings, ...architectureFindings];

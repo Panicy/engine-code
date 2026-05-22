@@ -371,7 +371,7 @@ Schema：`schemas/run-state.schema.json`
 - `attempts[].status`
 - `attempts[].agent`
 - `attempts[].promptInputs`
-- `attempts[].changedFiles`
+- `attempts[].changedFiles`：当前保留为空数组；真实改动文件后续只能由 git diff 自动采集写入，不接受 adapter 自报作为审查依据。
 - `attempts[].checks`
 - `attempts[].lastIssue`
 - `attempts[].summary`

@@ -360,20 +360,6 @@ function testShellAdapterMissingCommand(baseDir) {
   assert(taskRun.attempts[0].errors.includes('缺少 --shell-command'), 'task-run 应记录缺少命令错误');
 }
 
-function testReviewRunnerAllowedPathFailure(baseDir) {
-  const localProjectPath = writeProjectWithWorkspace(baseDir, 'local-workspace-project-review-fail.json', '.');
-  const paths = prepareApprovedFeature(baseDir, 'review-runner-allowed-path-failure', { projectPath: localProjectPath });
-  const result = runLoop(paths, [
-    '--agent-adapter', 'shell',
-    '--shell-command', `${process.execPath} -e "console.log('changed-outside')"`,
-    '--shell-changed-files', 'outside/file.txt',
-  ]);
-  assert(result.summary.taskSummary.reviewFailed.includes('TASK-001'), '越界 changedFiles 应让任务进入 reviewFailed');
-  const review = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'review.json'));
-  assert(review.verdict === 'fail', '越界 changedFiles 应生成 fail review');
-  assert(review.scopeFindings.some((finding) => finding.description.includes('task.allowedPaths')), 'review 应记录 allowedPaths finding');
-}
-
 function testReviewFailureRetry(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'review-failure-retry');
   const result = runLoop(paths, ['--mock-fail-task', 'TASK-001', '--mock-fail-stage', 'review']);
@@ -406,7 +392,6 @@ const tests = [
   ['Checks Runner 真实 HTTP', testChecksRunnerRealHttp],
   ['Shell Adapter 成功执行', testShellAdapterSuccess],
   ['Shell Adapter 缺少命令', testShellAdapterMissingCommand],
-  ['Review Runner 越界路径失败', testReviewRunnerAllowedPathFailure],
   ['评审失败复跑入口', testReviewFailureRetry],
   ['needs_human 非阻塞状态', testNeedsHuman],
 ];

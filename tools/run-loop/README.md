@@ -43,7 +43,6 @@ node tools/run-loop/run-feature.mjs \
 --mock-fail-stage check
 --mock-fail-check backend-compile
 --shell-command "node -e \"console.log('ok')\""
---shell-changed-files "ruoyi-modules/demo/Demo.java"
 --shell-timeout-ms 300000
 --owner run-loop
 ```
@@ -68,8 +67,7 @@ node tools/run-loop/run-feature.mjs \
   --task-plan task-plan.json \
   --run-state run-state.json \
   --agent-adapter shell \
-  --shell-command "node -e \"console.log('shell-ok')\"" \
-  --shell-changed-files "ruoyi-modules/demo/Demo.java"
+  --shell-command "node -e \"console.log('shell-ok')\""
 ```
 
 ## Checks Runner
@@ -87,10 +85,11 @@ node tools/run-loop/run-feature.mjs \
 
 Run Loop 会在 adapter 成功且 checks 通过后运行 Review Runner。当前 review 会校验：
 
-- `changedFiles` 是否在 `task.allowedPaths` 内。
 - 必需 checks 是否都有结果且为 `passed`。
 
 Review 失败时，任务进入 `review_failed`，并写入 `runs/<taskId>/review.json`。
+
+注意：Review Runner 暂不接受 adapter 自报的 `changedFiles` 作为 allowedPaths 审查依据。后续只能通过 git diff 自动采集真实改动文件后再启用该类审查。
 
 ## Mock 失败
 

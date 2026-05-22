@@ -355,7 +355,7 @@ done
 9. 每个 task 执行前通过 Skill Context Builder 解析 base、template、skill。
 10. 写入 `runs/<taskId>/task-context.json`。
 11. 调用 Agent Adapter 执行任务。
-12. Agent Adapter 返回 outcome，包括 summary、errors、changedFiles 等。
+12. Agent Adapter 返回 outcome，包括 summary、errors 等。
 13. Checks Runner 运行 task checks。
 14. checks 失败，标记 checks_failed；如达到 maxAttempts，标记 needs_human。
 15. checks 通过，进入 Review Runner。
@@ -426,7 +426,7 @@ Agent Adapter 是 Run Loop 和真实执行器之间的边界。
 
 后续需要接入：
 
-- `codex`：读取 task-context，调用真实 Codex 执行开发任务，并输出 changedFiles、summary、errors。
+- `codex`：读取 task-context，调用真实 Codex 执行开发任务，并输出 summary、errors。真实 changedFiles 应由 git diff 自动采集。
 
 Adapter 只返回执行 outcome，不直接修改 run-state，不直接写 task-run/review，不绕过 checks 和 review。
 
@@ -501,7 +501,7 @@ Reviewer 必须检查：
 
 当前缺口：
 
-- changedFiles 仍依赖 adapter 自报，尚未从 git diff 自动采集。
+- 不接受 adapter 自报 changedFiles 作为审查依据，尚未从 git diff 自动采集。
 - 未读取真实文件内容。
 - 未检查 skill qualityGates。
 - 未做后端/中台/客户端专项规则。

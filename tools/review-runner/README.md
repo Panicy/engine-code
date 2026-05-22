@@ -4,10 +4,14 @@ Review Runner 在 task 执行和 checks 之后运行，用于生成标准 `revie
 
 ## 当前能力
 
-- 校验 `changedFiles` 是否都在 `task.allowedPaths` 内。
 - 校验必需 checks 是否都有结果且状态为 `passed`。
 - 根据确定性 finding 生成 `criteriaResults`、`scopeFindings`、`testFindings` 和 `requiredFixes`。
 - review 失败时，Run Loop 会把 task 标记为 `review_failed`，下一轮可自动重跑。
+
+## 暂不做
+
+- 不接受 Agent Adapter 自报的 `changedFiles` 作为 allowedPaths 审查依据。
+- allowedPaths 审查需要等 git diff 自动采集真实改动文件后再启用。
 
 ## 边界
 

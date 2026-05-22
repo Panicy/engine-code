@@ -160,11 +160,11 @@
 
 任务：
 
-- [x] 检查 changedFiles 是否匹配 allowedPaths。
+- [ ] 检查 git diff changedFiles 是否匹配 allowedPaths。
 - [ ] 检查 expectedChangedFiles 是否合理。
 - [x] 生成 task acceptanceCriteria 级 review 结果。
 - [ ] 检查 skill qualityGates。
-- [x] 识别越界改动。
+- [ ] 基于 git diff 识别越界改动。
 - [ ] 识别高风险改动并返回 needs_human。
 - [x] 写入 review.json。
 - [ ] 自动读取 git diff，避免依赖 adapter 自报 changedFiles。
@@ -288,9 +288,9 @@ JSON Contracts
 
 ## 当前架构缺陷
 
-1. **Review Runner 依赖 adapter 自报 changedFiles**
+1. **Review Runner 缺少可信 changedFiles 输入**
 
-   这是当前最大可信度缺口。真实执行器如果漏报 changedFiles，allowedPaths review 就可能被绕过。下一步应从 git diff 自动采集真实改动，并与 adapter 上报结果交叉校验。
+   已删除 adapter 自报 changedFiles 的审查入口，避免把不可信输入当作安全依据。下一步应从 git diff 自动采集真实改动，并将其作为 allowedPaths review 的唯一可信输入。
 
 2. **Project/Workspace 管理仍然缺位**
 
@@ -298,7 +298,7 @@ JSON Contracts
 
 3. **Agent Adapter 还没有真正的 Codex 执行器**
 
-   `shell` adapter 证明了执行器插槽可用，但它不是面向开发任务的真实 agent。后续需要 `codex` adapter 读取 task-context，执行受控开发，并输出 changedFiles/summary/errors。
+   `shell` adapter 证明了执行器插槽可用，但它不是面向开发任务的真实 agent。后续需要 `codex` adapter 读取 task-context，执行受控开发，并输出 summary/errors；changedFiles 应由 git diff 自动采集。
 
 4. **Checks Runner 的鉴权能力还不完整**
 
