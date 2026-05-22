@@ -9,6 +9,7 @@ import { scenarios, smokeScenarioIds } from './real-demand-scenarios/index.mjs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../..');
+const sourceTemplatesRoot = path.resolve(repoRoot, '.engine/source-templates');
 let lastBaseDir = null;
 
 function usage() {
@@ -122,13 +123,29 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function assertInside(parent, child, message) {
+  const parentAbs = path.resolve(parent);
+  const childAbs = path.resolve(child);
+  const relative = path.relative(parentAbs, childAbs);
+  assert(relative && !relative.startsWith('..') && !path.isAbsolute(relative), message);
+}
+
+function assertScenarioSafe(scenario) {
+  assert(!scenario.sourceWorkspace, `scenario ${scenario.id} 不允许指定外部 sourceWorkspace，真实需求 E2E 只能使用登记基座模板。`);
+  assert(!scenario.workspace, `scenario ${scenario.id} 不允许指定外部 workspace，workspace 必须由 runner 在临时目录创建。`);
+  assert(!scenario.sourcePath, `scenario ${scenario.id} 不允许指定外部 sourcePath，真实需求 E2E 只能复制 .engine/source-templates。`);
+}
+
 function sourceTemplatePath(templateId) {
-  return path.resolve(repoRoot, '.engine/source-templates', templateId);
+  const sourceTemplate = path.resolve(sourceTemplatesRoot, templateId);
+  assertInside(sourceTemplatesRoot, sourceTemplate, `templateId 越界：${templateId}`);
+  return sourceTemplate;
 }
 
 function copySourceTemplate(templateId, workspace) {
   const sourceTemplate = sourceTemplatePath(templateId);
   assert(fs.existsSync(sourceTemplate), `source template 不存在：${sourceTemplate}`);
+  assertInside(sourceTemplatesRoot, sourceTemplate, `source template 必须位于 .engine/source-templates：${sourceTemplate}`);
   fs.cpSync(sourceTemplate, workspace, {
     recursive: true,
     filter: (source) => !source.includes(`${path.sep}.git${path.sep}`) && !source.endsWith(`${path.sep}.git`),
@@ -144,7 +161,9 @@ function initGitWorkspace(workspace) {
 }
 
 function prepareWorkspace(baseDir, scenario) {
+  assertScenarioSafe(scenario);
   const workspace = path.join(baseDir, `${scenario.baseId}-workspace`);
+  assertInside(baseDir, workspace, `workspace 必须位于真实需求 E2E 临时目录：${workspace}`);
   copySourceTemplate(scenario.templateId, workspace);
   initGitWorkspace(workspace);
   return workspace;
@@ -320,6 +339,7 @@ function assertScenario(paths, scenario, adapter, workspace) {
 
 function runRealDemandE2E(args) {
   const scenario = scenarios[args.scenario];
+  assertScenarioSafe(scenario);
   const tmpRoot = fs.existsSync('/private/tmp') ? '/private/tmp' : os.tmpdir();
   const baseDir = fs.mkdtempSync(path.join(tmpRoot, 'engine-real-demand-e2e-'));
   lastBaseDir = baseDir;

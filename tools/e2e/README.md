@@ -28,6 +28,13 @@ node tools/e2e/run-engine-e2e.mjs --keep-tmp
 
 `run-real-demand-e2e.mjs` 是真实需求场景库 runner。它会复制 `.engine/source-templates/<template>` 到 `/private/tmp`，初始化临时 git baseline，然后通过 Project Init、PRD、task-plan、Run Loop、真实文件修改、真实 checks、Review Runner 和产物断言验证一条可重复的需求执行链路。默认使用 shell adapter 做确定性修改，不污染源模板。
 
+安全边界：
+
+- 真实需求 E2E 只能使用 `.engine/source-templates/<template>` 作为源基座。
+- workspace 必须由 runner 创建在 `/private/tmp/engine-real-demand-e2e-*` 下。
+- 场景不允许指定外部 `sourceWorkspace`、`sourcePath` 或 `workspace`，避免误把业务项目当成测试基座。
+- 需要验证 Gitee 固定基座时，应先 clone `backend-starter`、`middle-starter`、`uniapp-template` 到受控临时目录，再接入专门的基座验收脚本；不要直接指向业务项目目录。
+
 场景定义放在 `tools/e2e/real-demand-scenarios/`。新增场景时优先复用现有字段结构：目标模板、目标 base、skill、allowedPaths、expectedChangedFiles、checks 和确定性 modifier。
 
 查看可用场景：
