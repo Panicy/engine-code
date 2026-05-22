@@ -11,6 +11,7 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapt
 - 通过 `--agent-adapter` 选择 task 执行器。
 - 通过 `--checks-mode` 选择检查模式。
 - 默认 `mock` adapter 会模拟 agent 和 review；`shell` adapter 可真实执行一条 shell 命令。
+- `codex` adapter 可通过 Codex CLI 或兼容命令执行单个 task。
 - 默认 `real` checks 会真实执行 command 和 HTTP 检查。
 - 写入：
   - `runs/<taskId>/task-run.json`
@@ -45,6 +46,10 @@ node tools/run-loop/run-feature.mjs \
 --mock-fail-check backend-compile
 --shell-command "node -e \"console.log('ok')\""
 --shell-timeout-ms 300000
+--codex-command codex
+--codex-model gpt-5
+--codex-timeout-ms 300000
+--codex-extra-arg exec
 --owner run-loop
 ```
 
@@ -56,6 +61,7 @@ node tools/run-loop/run-feature.mjs \
 
 - `mock`：默认执行器，用于验证状态机和异常复跑。
 - `shell`：真实执行 `--shell-command`，工作目录为 `project.bases[].workspace` 对应目录。
+- `codex`：真实执行 `--codex-command`，工作目录为 `project.bases[].workspace` 对应目录。
 
 Adapter 只返回单个 task 的执行 outcome，不直接修改 `run-state.json`，也不直接写 `task-run.json` 或 `review.json`。状态流转、重试耗尽、运行锁释放和产物写入仍由 Run Loop 统一处理。
 
@@ -72,6 +78,22 @@ node tools/run-loop/run-feature.mjs \
   --agent-adapter shell \
   --shell-command "node -e \"console.log('shell-ok')\""
 ```
+
+Codex 示例：
+
+```bash
+node tools/run-loop/run-feature.mjs \
+  --project project.json \
+  --prd prd.json \
+  --task-plan task-plan.json \
+  --run-state run-state.json \
+  --agent-adapter codex \
+  --codex-command codex \
+  --codex-extra-arg exec \
+  --codex-model gpt-5
+```
+
+Codex Adapter 只执行当前 task。Run Loop 会先写入 `runs/<taskId>/task-context.json`，Codex Adapter 再把该文件路径写入最后一个 prompt 参数。Adapter 不写 run-state/task-run/review，不执行 checks，不做 allowedPaths 审查，也不提供可信 `changedFiles`；可信变更列表仍由 Run Loop 的 git diff collector 采集。未传 `--codex-extra-arg` 时默认使用 `exec`，即默认调用形态接近 `codex exec "<prompt>"`。
 
 ## Checks Runner
 
@@ -126,7 +148,6 @@ node tools/run-loop/run-feature.mjs \
 
 ## 后续增强
 
-- 接入真实 `codex` Agent Adapter。
 - 增强 Checks Runner 的鉴权令牌注入和响应体断言。
 - 增强 Review Runner 的语义审查、权限/菜单/SQL/API 契约一致性检查。
 - 增加更细粒度的运行锁恢复策略。

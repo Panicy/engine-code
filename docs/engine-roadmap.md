@@ -36,7 +36,7 @@
 | Task Plan 生成与确认模块 | in_progress | `tools/task-planner/` | 已支持规则化生成 task-plan 草稿和人工确认工具 |
 | Run Loop 执行器 | in_progress | `tools/run-loop/run-feature.mjs` | 已模块化调度 Skill Context、Agent Adapter、Checks Runner、Review Runner，并写入运行产物 |
 | Skill Context | done | `tools/skill-context/` | 已能为单个 task 装配 project/base/template/PRD/task/skill 上下文 |
-| Agent Adapter | in_progress | `tools/agent-adapters/` | 已支持 `mock` 和 `shell`，待接入真实 Codex adapter |
+| Agent Adapter | in_progress | `tools/agent-adapters/` | 已支持 `mock`、`shell` 和 `codex`，待增强真实 Codex smoke 与长任务可观测性 |
 | Checks Runner | in_progress | `tools/checks-runner/` | 默认真实执行 command/http checks，支持 mock 回归模式 |
 | Review Runner | in_progress | `tools/review-runner/` | 已支持必需 checks 和基于可信 changedFiles 的 allowedPaths 审查，待增强语义审查 |
 | 运行产物写入器 | in_progress | `tools/run-loop/run-feature.mjs` | 已原子写入 task-context/task-run/review/run-state/loop-summary，待抽成独立模块 |
@@ -117,7 +117,7 @@
 - [x] 写入 loop-summary。
 - [x] 每轮前后调用 Validator。
 - [ ] 实现 stale running 恢复策略。
-- [ ] 接入真实 Codex Agent Adapter。
+- [x] 接入真实 Codex Agent Adapter。
 - [x] 自动采集 git diff changedFiles。
 
 完成标准：
@@ -260,10 +260,10 @@
 
 近期建议按以下顺序推进：
 
-1. Codex Agent Adapter，把 task-context 交给真实开发执行器。
-2. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
-3. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
-4. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
+1. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
+2. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
+3. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
+4. Codex Agent Adapter 增强，补真实 Codex smoke、日志归档和长任务可观测性。
 5. Project Init 增强，补 workspace 注册、模板版本管理和可选 clone 策略。
 6. Recovery 增强，补批量恢复、stale running 处理和 cancelled reopen 策略。
 
@@ -297,9 +297,9 @@ JSON Contracts
 
    Run Loop 已能把 `checks_failed`、`review_failed`、`needs_human` 标出来，但缺少面向操作者的恢复命令、异常列表、attempts 查看和人工恢复记录。
 
-3. **Agent Adapter 还没有真正的 Codex 执行器**
+3. **Codex Agent Adapter 还需要真实场景打磨**
 
-   `shell` adapter 证明了执行器插槽可用，但它不是面向开发任务的真实 agent。后续需要 `codex` adapter 读取 task-context，执行受控开发，并输出 summary/errors；changedFiles 继续由 Run Loop 的 git diff collector 统一采集。
+   已支持 `codex` adapter 将 task-context 路径通过 prompt 交给 Codex 执行，并保持 changedFiles 由 Run Loop git diff collector 统一采集。后续需要真实 Codex smoke、日志归档、长任务超时策略和更好的执行可观测性。
 
 4. **Checks Runner 的鉴权能力还不完整**
 

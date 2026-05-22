@@ -32,6 +32,10 @@ function usage() {
     '  --mock-fail-check CHECK-001',
     '  --shell-command <command>',
     '  --shell-timeout-ms 300000',
+    '  --codex-command codex',
+    '  --codex-model <model>',
+    '  --codex-timeout-ms 300000',
+    '  --codex-extra-arg <arg>',
     '  --owner run-loop',
   ].join('\n');
 }
@@ -52,6 +56,10 @@ function parseArgs(argv) {
     'mock-fail-check',
     'shell-command',
     'shell-timeout-ms',
+    'codex-command',
+    'codex-model',
+    'codex-timeout-ms',
+    'codex-extra-arg',
     'owner',
   ]);
   for (let i = 2; i < argv.length; i += 1) {
@@ -64,8 +72,12 @@ function parseArgs(argv) {
     const key = arg.slice(2);
     if (!allowedKeys.has(key)) throw new Error(`未知参数：${arg}`);
     const value = argv[i + 1];
-    if (!value || value.startsWith('--')) throw new Error(`参数 ${arg} 缺少值`);
-    args[key] = value;
+    if (!value || (key !== 'codex-extra-arg' && value.startsWith('--'))) throw new Error(`参数 ${arg} 缺少值`);
+    if (key === 'codex-extra-arg') {
+      args[key] = [...(args[key] ?? []), value];
+    } else {
+      args[key] = value;
+    }
     i += 1;
   }
   return args;
@@ -500,6 +512,7 @@ function runLoop(args) {
           state,
           attempt: state.attempts,
           startedAt: startedTaskAt,
+          taskContextPath,
         });
         validateAdapterOutcome(outcome, adapter.id);
         const afterGitSnapshot = collectGitDiffSnapshot(taskContext.base.workspaceAbs);

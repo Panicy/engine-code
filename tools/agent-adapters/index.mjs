@@ -1,9 +1,11 @@
 import { createMockAdapter } from './mock-adapter.mjs';
 import { createShellAdapter } from './shell-adapter.mjs';
+import { createCodexAdapter } from './codex-adapter.mjs';
 
 const adapterFactories = {
   mock: createMockAdapter,
   shell: createShellAdapter,
+  codex: createCodexAdapter,
 };
 
 function availableAgentAdapters() {

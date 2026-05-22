@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { validateFiles } from '../validator/validate-feature.mjs';
 import { runChecks } from '../checks-runner/index.mjs';
 import { runReview } from '../review-runner/index.mjs';
+import { availableAgentAdapters } from '../agent-adapters/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -707,6 +708,183 @@ function testShellAdapterSuccess(baseDir) {
   assert(taskRun.attempts[0].summary.includes('shell-ok'), 'task-run 应记录 shell 输出摘要');
 }
 
+function writeFakeCodex(baseDir) {
+  const fakePath = path.join(baseDir, 'fake-codex.mjs');
+  fs.writeFileSync(fakePath, `#!/usr/bin/env node
+import fs from 'node:fs';
+const args = process.argv.slice(2);
+if (args.includes('--task-context')) {
+  console.error('unexpected --task-context option');
+  process.exit(12);
+}
+if (args[0] !== 'exec') {
+  console.error('missing exec subcommand');
+  process.exit(13);
+}
+function valueAfter(flag) {
+  const index = args.indexOf(flag);
+  return index >= 0 ? args[index + 1] : '';
+}
+const mode = valueAfter('--fake-mode') || 'success';
+const prompt = args.at(-1) || '';
+const match = prompt.match(/task-context 文件：(.+?)(?:\\n|$)/);
+const taskContextPath = match ? match[1].trim() : '';
+if (!taskContextPath || !fs.existsSync(taskContextPath)) {
+  console.error('missing task context');
+  process.exit(11);
+}
+if (mode === 'write-allowed') {
+  fs.mkdirSync('src/pages/notice', { recursive: true });
+  fs.writeFileSync('src/pages/notice/index.vue', 'after\\\\n');
+}
+if (mode === 'write-out-of-scope') {
+  fs.mkdirSync('src/pages/user', { recursive: true });
+  fs.writeFileSync('src/pages/user/index.vue', 'after\\\\n');
+}
+if (mode === 'fake-changed-files') {
+  console.log(JSON.stringify({ changedFiles: ['unsafe/from-codex.txt'] }));
+}
+if (mode === 'fail') {
+  console.error('fake codex failed');
+  process.exit(7);
+}
+if (mode === 'timeout') {
+  setTimeout(() => {}, 5000);
+} else {
+  console.log('fake codex ok');
+}
+`, 'utf8');
+  fs.chmodSync(fakePath, 0o755);
+  return fakePath;
+}
+
+function codexArgs(fakeCodex, mode, extraArgs = []) {
+  return [
+    '--agent-adapter', 'codex',
+    '--codex-command', fakeCodex,
+    '--codex-extra-arg', 'exec',
+    '--codex-extra-arg', '--fake-mode',
+    '--codex-extra-arg', mode,
+    '--max-tasks', '1',
+    ...extraArgs,
+  ];
+}
+
+function codexExecArgs(fakeCodex, mode, extraArgs = []) {
+  return [
+    '--agent-adapter', 'codex',
+    '--codex-command', fakeCodex,
+    '--codex-extra-arg', 'exec',
+    '--codex-extra-arg', '--fake-mode',
+    '--codex-extra-arg', mode,
+    '--max-tasks', '1',
+    ...extraArgs,
+  ];
+}
+
+function testAvailableAgentAdaptersIncludesCodex() {
+  assert(availableAgentAdapters().includes('codex'), 'availableAgentAdapters 应包含 codex');
+}
+
+function testCodexAdapterSuccessNoChanges(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-success-no-changes');
+  const result = runLoop(paths, codexArgs(fakeCodex, 'success'));
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'codex fake 成功时任务应 done');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].agent.tool === 'codex', 'task-run 应记录 codex agent');
+  assert(taskRun.attempts[0].changedFiles.length === 0, 'codex 未改文件时 changedFiles 应为空');
+}
+
+function testCodexAdapterExecPromptShape(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-exec-prompt-shape');
+  const result = runLoop(paths, codexExecArgs(fakeCodex, 'success'));
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'codex exec prompt 形态应可执行');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].summary.includes('fake codex ok'), 'codex fake 应收到 prompt 并执行成功');
+}
+
+function testCodexAdapterDefaultsToExec(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-default-exec');
+  const result = runLoop(paths, [
+    '--agent-adapter', 'codex',
+    '--codex-command', fakeCodex,
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.done.includes('TASK-001'), '未传 --codex-extra-arg 时应默认使用 exec 子命令');
+}
+
+function testCodexAdapterAllowedPathPass(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-allowed-path', { 'src/pages/notice/index.vue': 'before\n' });
+  setFirstTaskAllowedPaths(paths, ['src/pages/notice/**']);
+  const result = runLoop(paths, codexArgs(fakeCodex, 'write-allowed'));
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'codex 修改允许路径时任务应 done');
+  assert(firstAttemptChangedFiles(paths).join(',') === 'src/pages/notice/index.vue', 'codex 修改应由 git diff 写入 changedFiles');
+  const review = firstReview(paths);
+  assert(review.verdict === 'pass', 'codex 修改允许路径时 review 应 pass');
+}
+
+function testCodexAdapterOutOfScopeReviewFail(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-out-of-scope', { 'src/pages/user/index.vue': 'before\n' });
+  setFirstTaskAllowedPaths(paths, ['src/pages/notice/**']);
+  const result = runLoop(paths, codexArgs(fakeCodex, 'write-out-of-scope'));
+  assert(result.summary.taskSummary.reviewFailed.includes('TASK-001'), 'codex 修改越界路径时任务应 review_failed');
+  assert(firstAttemptChangedFiles(paths).join(',') === 'src/pages/user/index.vue', 'codex 越界修改也应由 git diff 采集');
+  const review = firstReview(paths);
+  assert(review.verdict === 'fail', 'codex 修改越界路径时 review 应 fail');
+}
+
+function testCodexAdapterIgnoresFakeChangedFiles(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-fake-changed-files');
+  const result = runLoop(paths, codexArgs(fakeCodex, 'fake-changed-files'));
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'codex 仅输出伪造 changedFiles 时任务仍可 done');
+  assert(firstAttemptChangedFiles(paths).length === 0, 'codex 输出的伪造 changedFiles 不应被采用');
+}
+
+function testCodexAdapterNonZeroNeedsHuman(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-non-zero');
+  const result = runLoop(paths, codexArgs(fakeCodex, 'fail'));
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), 'codex 非 0 退出应进入 needsHuman');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].errors.some((item) => item.includes('exited with status 7')), 'codex 非 0 应记录退出码');
+}
+
+function testCodexAdapterMissingCommandNeedsHuman(baseDir) {
+  const paths = prepareGitDiffFeature(baseDir, 'codex-missing-command');
+  const result = runLoop(paths, [
+    '--agent-adapter', 'codex',
+    '--codex-command', path.join(baseDir, 'missing-codex-command'),
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), 'codex 命令不存在应进入 needsHuman');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].errors.some((item) => item.includes('failed to start')), 'codex 命令不存在应记录启动失败');
+}
+
+function testCodexAdapterTimeoutNeedsHuman(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-timeout');
+  const result = runLoop(paths, codexArgs(fakeCodex, 'timeout', ['--codex-timeout-ms', '1000']));
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), 'codex timeout 应进入 needsHuman');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].errors.some((item) => item.includes('timeout')), 'codex timeout 应记录错误');
+}
+
+function testCodexAdapterInvalidTimeoutNeedsHuman(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-invalid-timeout');
+  const result = runLoop(paths, codexArgs(fakeCodex, 'success', ['--codex-timeout-ms', '999']));
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), '非法 --codex-timeout-ms 应进入 needsHuman');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].errors.includes('非法 --codex-timeout-ms'), '非法 timeout 应记录明确错误');
+}
+
 function prepareGitDiffFeature(baseDir, featureId, files = {}) {
   const workspace = path.join(baseDir, featureId, 'workspace');
   initGitWorkspace(workspace, files);
@@ -1100,7 +1278,18 @@ const tests = [
   ['Review Runner allowedPaths 目录边界', testReviewAllowedPathsGlobBoundary],
   ['Review Runner allowedPaths 部分越界', testReviewAllowedPathsPartialFail],
   ['Review Runner changedFiles 为空不失败', testReviewAllowedPathsEmptyChangedFiles],
+  ['Agent Adapter 列表包含 codex', testAvailableAgentAdaptersIncludesCodex],
   ['Shell Adapter 成功执行', testShellAdapterSuccess],
+  ['Codex Adapter fake 成功不改文件', testCodexAdapterSuccessNoChanges],
+  ['Codex Adapter exec prompt 形态', testCodexAdapterExecPromptShape],
+  ['Codex Adapter 默认 exec 子命令', testCodexAdapterDefaultsToExec],
+  ['Codex Adapter fake 修改允许路径', testCodexAdapterAllowedPathPass],
+  ['Codex Adapter fake 修改越界路径', testCodexAdapterOutOfScopeReviewFail],
+  ['Codex Adapter 忽略伪造 changedFiles', testCodexAdapterIgnoresFakeChangedFiles],
+  ['Codex Adapter 非 0 退出', testCodexAdapterNonZeroNeedsHuman],
+  ['Codex Adapter 命令不存在', testCodexAdapterMissingCommandNeedsHuman],
+  ['Codex Adapter timeout', testCodexAdapterTimeoutNeedsHuman],
+  ['Codex Adapter 非法 timeout', testCodexAdapterInvalidTimeoutNeedsHuman],
   ['Git Diff Collector 采集修改文件', testGitDiffCollectsModifiedFile],
   ['Git Diff Collector 采集新增文件', testGitDiffCollectsAddedFile],
   ['Git Diff Collector 采集多文件', testGitDiffCollectsMultipleFiles],
