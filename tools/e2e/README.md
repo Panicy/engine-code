@@ -28,11 +28,21 @@ node tools/e2e/run-engine-e2e.mjs --keep-tmp
 
 `run-real-demand-e2e.mjs` 是真实需求场景库 runner。它会复制 `.engine/source-templates/<template>` 到 `/private/tmp`，初始化临时 git baseline，然后通过 Project Init、PRD、task-plan、Run Loop、真实文件修改、真实 checks、Review Runner 和产物断言验证一条可重复的需求执行链路。默认使用 shell adapter 做确定性修改，不污染源模板。
 
+场景定义放在 `tools/e2e/real-demand-scenarios/`。新增场景时优先复用现有字段结构：目标模板、目标 base、skill、allowedPaths、expectedChangedFiles、checks 和确定性 modifier。
+
 查看可用场景：
 
 ```bash
 node tools/e2e/run-real-demand-e2e.mjs --list-scenarios
 ```
+
+运行全部轻量正向场景：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs --all
+```
+
+`--all` 当前会运行客户端、后端、中台的正向 smoke 场景；越界类负向场景需显式指定。
 
 默认场景：
 
