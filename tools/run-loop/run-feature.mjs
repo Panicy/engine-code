@@ -118,12 +118,12 @@ function validateOrThrow(report, label) {
   }
 }
 
-function acquireLock(runState, owner) {
+function acquireLock(runState, owner, startedAt = nowIso()) {
   const existing = runState.activeRunLock;
   if (existing && Date.parse(existing.expiresAt) > Date.now()) {
     throw new Error(`Run Loop 已被 ${existing.owner} 锁定，expiresAt=${existing.expiresAt}`);
   }
-  const timestamp = nowIso();
+  const timestamp = startedAt;
   runState.activeRunLock = {
     lockId: `LOCK-${Date.now()}`,
     owner,
@@ -132,6 +132,7 @@ function acquireLock(runState, owner) {
     expiresAt: addMinutesIso(30),
   };
   runState.status = 'running';
+  if (!runState.startedAt) runState.startedAt = timestamp;
   runState.updatedAt = timestamp;
 }
 
@@ -388,7 +389,7 @@ function runLoop(args) {
   validateOrThrow(preReport, 'Run Loop 前置 Validator');
 
   const executedTaskIds = [];
-  acquireLock(runState, owner);
+  acquireLock(runState, owner, startedAt);
   writeJsonAtomic(args['run-state'], runState);
 
   try {

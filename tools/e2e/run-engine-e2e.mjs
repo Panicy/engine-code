@@ -221,6 +221,7 @@ function testHappyPath(baseDir) {
   assert(result.summary.taskSummary.done.length === 3, '完整执行后 3 个 task 应全部 done');
   const runState = readJson(paths.runState);
   assert(runState.status === 'complete', '完整执行后 run-state.status 应为 complete');
+  assert(typeof runState.startedAt === 'string' && runState.startedAt.length > 0, '完整执行后 run-state.startedAt 应记录开始时间');
   assert(runState.activeRunLock === null, '完整执行后 activeRunLock 应释放');
   assert(runState.artifacts.some((artifact) => artifact.type === 'taskContext'), 'Run Loop 应生成 taskContext 产物');
   const taskContext = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-context.json'));
