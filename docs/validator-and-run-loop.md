@@ -423,7 +423,8 @@ Agent Adapter 是 Run Loop 和真实执行器之间的边界。
 
 - `mock`：用于状态机和异常回归。
 - `shell`：真实执行一条 shell 命令，用于验证真实执行器插槽。
-- `codex`：通过 prompt 传入 task-context 路径，调用 Codex 或兼容命令执行开发任务，并输出 summary、errors。真实 changedFiles 由 Run Loop 从目标基座 git diff 自动采集。
+- `external`：通过 prompt 传入 task-context 路径，调用任意兼容外部 agent 命令执行开发任务，并输出 summary、errors。
+- `codex`：Codex CLI 兼容实现，是 external agent 模式的一个内置便捷入口。
 
 Adapter 只返回执行 outcome，不直接修改 run-state，不直接写 task-run/review，不绕过 checks 和 review。
 

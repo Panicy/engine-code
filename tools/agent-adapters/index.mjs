@@ -1,10 +1,12 @@
 import { createMockAdapter } from './mock-adapter.mjs';
 import { createShellAdapter } from './shell-adapter.mjs';
 import { createCodexAdapter } from './codex-adapter.mjs';
+import { createExternalAdapter } from './external-adapter.mjs';
 
 const adapterFactories = {
   mock: createMockAdapter,
   shell: createShellAdapter,
+  external: createExternalAdapter,
   codex: createCodexAdapter,
 };
 

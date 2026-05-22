@@ -1,0 +1,151 @@
+import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
+
+function outputSummary(result) {
+  const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+  return output ? output.slice(0, 1000) : `exit ${result.status ?? 'unknown'}`;
+}
+
+function normalizeExtraArgs(value, defaultExtraArgs = []) {
+  if (!value) return defaultExtraArgs;
+  return Array.isArray(value) ? value : [value];
+}
+
+function buildPrompt(taskContextPath, label) {
+  return [
+    `请读取 task-context 文件：${taskContextPath}`,
+    '只执行该 task，不要扩展到其他任务。',
+    '遵守 task-context 中的 scope、executionHints.allowedPaths、checks 和 skill 文档。',
+    '不要提交代码，不要 push，不要创建 PR。',
+    '不要自报 changedFiles；可信 changedFiles 由 Run Loop 的 git diff collector 采集。',
+    `你当前是 ${label} 执行器。完成后输出简短 summary；如果无法完成，请说明原因。`,
+  ].join('\n');
+}
+
+function needsHuman({ tool, model, summary, errors, nextActions = ['检查 Agent Adapter 输出并人工处理。'] }) {
+  return {
+    requestedStatus: 'needs_human',
+    taskRunStatus: 'needs_human',
+    reviewVerdict: null,
+    source: 'executor',
+    agent: { tool, model },
+    changedFiles: [],
+    checks: [],
+    summary,
+    errors,
+    nextActions,
+  };
+}
+
+function createProcessAgentAdapter(config) {
+  const {
+    id,
+    tool,
+    model,
+    argPrefix,
+    defaultCommand,
+    defaultExtraArgs = [],
+    defaultTimeoutMs = '300000',
+    supportsModelArg = false,
+    label = id,
+  } = config;
+
+  return {
+    id,
+    tool,
+    model,
+    execute({ args, taskContext, taskContextPath }) {
+      const command = args[`${argPrefix}-command`] ?? defaultCommand;
+      const cwd = taskContext.base.workspaceAbs;
+      const currentModel = args[`${argPrefix}-model`] ?? model;
+      if (!command) {
+        return needsHuman({
+          tool,
+          model: currentModel,
+          summary: `${id} adapter 缺少 --${argPrefix}-command。`,
+          errors: [`缺少 --${argPrefix}-command`],
+          nextActions: [`提供 --${argPrefix}-command 后重跑。`],
+        });
+      }
+      if (!fs.existsSync(cwd)) {
+        return needsHuman({
+          tool,
+          model: currentModel,
+          summary: `base workspace 不存在：${cwd}`,
+          errors: [`base workspace 不存在：${cwd}`],
+          nextActions: ['初始化或修正 project.bases[].workspace 后重跑。'],
+        });
+      }
+      if (!taskContextPath) {
+        return needsHuman({
+          tool,
+          model: currentModel,
+          summary: `${id} adapter 缺少 task-context 路径。`,
+          errors: ['缺少 taskContextPath'],
+          nextActions: ['检查 Run Loop 是否传递 taskContextPath。'],
+        });
+      }
+
+      const timeoutRaw = args[`${argPrefix}-timeout-ms`] ?? defaultTimeoutMs;
+      const timeoutMs = /^\d+$/.test(timeoutRaw) ? Number.parseInt(timeoutRaw, 10) : Number.NaN;
+      if (!Number.isInteger(timeoutMs) || timeoutMs < 1000) {
+        return needsHuman({
+          tool,
+          model: currentModel,
+          summary: `--${argPrefix}-timeout-ms 必须是大于等于 1000 的整数。`,
+          errors: [`非法 --${argPrefix}-timeout-ms`],
+          nextActions: [`修正 --${argPrefix}-timeout-ms 后重跑。`],
+        });
+      }
+
+      const spawnArgs = [
+        ...normalizeExtraArgs(args[`${argPrefix}-extra-arg`], defaultExtraArgs),
+      ];
+      if (supportsModelArg && args[`${argPrefix}-model`]) {
+        spawnArgs.push('--model', args[`${argPrefix}-model`]);
+      }
+      spawnArgs.push(buildPrompt(taskContextPath, label));
+
+      const result = spawnSync(command, spawnArgs, {
+        cwd,
+        shell: false,
+        encoding: 'utf8',
+        timeout: timeoutMs,
+        maxBuffer: 1024 * 1024,
+      });
+      const summary = outputSummary(result);
+      if (result.error) {
+        const isTimeout = result.error.code === 'ETIMEDOUT';
+        const message = isTimeout ? `${id} command timeout after ${timeoutMs}ms` : `${id} command failed to start: ${result.error.message}`;
+        return needsHuman({
+          tool,
+          model: currentModel,
+          summary: message,
+          errors: [message],
+        });
+      }
+      if (result.status !== 0) {
+        return needsHuman({
+          tool,
+          model: currentModel,
+          summary,
+          errors: [`${id} command exited with status ${result.status}: ${command}`],
+        });
+      }
+      return {
+        requestedStatus: 'done',
+        taskRunStatus: 'passed',
+        reviewVerdict: 'pass',
+        source: 'executor',
+        agent: { tool, model: currentModel },
+        changedFiles: [],
+        checks: [],
+        summary,
+        errors: [],
+        nextActions: [],
+      };
+    },
+  };
+}
+
+export { createProcessAgentAdapter };

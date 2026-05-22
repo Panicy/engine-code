@@ -1606,6 +1606,27 @@ function codexExecArgs(fakeCodex, mode, extraArgs = []) {
 
 function testAvailableAgentAdaptersIncludesCodex() {
   assert(availableAgentAdapters().includes('codex'), 'availableAgentAdapters 应包含 codex');
+  assert(availableAgentAdapters().includes('external'), 'availableAgentAdapters 应包含 external');
+}
+
+function testExternalAgentAdapterAllowedPathPass(baseDir) {
+  const fakeAgent = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'external-agent-allowed-path', { 'src/pages/notice/index.vue': 'before\n' });
+  setFirstTaskAllowedPaths(paths, ['src/pages/notice/**']);
+  const result = runLoop(paths, [
+    '--agent-adapter', 'external',
+    '--external-agent-command', fakeAgent,
+    '--external-agent-extra-arg', 'exec',
+    '--external-agent-extra-arg', '--fake-mode',
+    '--external-agent-extra-arg', 'write-allowed',
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'external agent 修改允许路径时任务应 done');
+  assert(firstAttemptChangedFiles(paths).join(',') === 'src/pages/notice/index.vue', 'external agent 修改应由 git diff 写入 changedFiles');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].agent.tool === 'external-agent', 'task-run 应记录 external-agent');
+  const review = firstReview(paths);
+  assert(review.verdict === 'pass', 'external agent 修改允许路径时 review 应 pass');
 }
 
 function testCodexAdapterSuccessNoChanges(baseDir) {
@@ -2119,6 +2140,7 @@ const tests = [
   ['Review Runner changedFiles 为空不失败', testReviewAllowedPathsEmptyChangedFiles],
   ['Agent Adapter 列表包含 codex', testAvailableAgentAdaptersIncludesCodex],
   ['Shell Adapter 成功执行', testShellAdapterSuccess],
+  ['External Agent Adapter fake 修改允许路径', testExternalAgentAdapterAllowedPathPass],
   ['Codex Adapter fake 成功不改文件', testCodexAdapterSuccessNoChanges],
   ['Codex Adapter exec prompt 形态', testCodexAdapterExecPromptShape],
   ['Codex Adapter 默认 exec 子命令', testCodexAdapterDefaultsToExec],

@@ -36,7 +36,7 @@
 | Task Plan 生成与确认模块 | in_progress | `tools/task-planner/` | 已支持规则化生成 task-plan 草稿和人工确认工具 |
 | Run Loop 执行器 | in_progress | `tools/run-loop/run-feature.mjs` | 已模块化调度 Skill Context、Agent Adapter、Checks Runner、Review Runner，并写入运行产物 |
 | Skill Context | done | `tools/skill-context/` | 已能为单个 task 装配 project/base/template/PRD/task/skill 上下文 |
-| Agent Adapter | in_progress | `tools/agent-adapters/` | 已支持 `mock`、`shell` 和 `codex`，待增强真实 Codex smoke 与长任务可观测性 |
+| Agent Adapter | in_progress | `tools/agent-adapters/` | 已支持 `mock`、`shell`、`external` 和 `codex`，待增强外部 agent smoke、日志归档与长任务可观测性 |
 | Checks Runner | in_progress | `tools/checks-runner/` | 默认真实执行 command/http checks，支持 mock 回归模式 |
 | Review Runner | in_progress | `tools/review-runner/` | 已支持必需 checks 和基于可信 changedFiles 的 allowedPaths 审查，待增强语义审查 |
 | 运行产物写入器 | in_progress | `tools/run-loop/run-feature.mjs` | 已原子写入 task-context/task-run/review/run-state/loop-summary，待抽成独立模块 |
@@ -263,7 +263,7 @@
 1. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
 2. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
 3. Checks Runner 增强，补 teardown 失败直达 needs_human、更多响应断言和真实后端 token 策略。
-4. Codex Agent Adapter 增强，补真实 Codex smoke、日志归档和长任务可观测性。
+4. Agent Adapter 增强，补真实外部 agent smoke、日志归档和长任务可观测性。
 5. Project Init 增强，补 workspace 注册、模板版本管理和可选 clone 策略。
 6. Recovery 增强，补批量恢复、stale running 处理和 cancelled reopen 策略。
 
@@ -297,9 +297,9 @@ JSON Contracts
 
    Run Loop 已能把 `checks_failed`、`review_failed`、`needs_human` 标出来，但缺少面向操作者的恢复命令、异常列表、attempts 查看和人工恢复记录。
 
-3. **Codex Agent Adapter 还需要真实场景打磨**
+3. **Agent Adapter 还需要真实场景打磨**
 
-   已支持 `codex` adapter 将 task-context 路径通过 prompt 交给 Codex 执行，并保持 changedFiles 由 Run Loop git diff collector 统一采集。后续需要真实 Codex smoke、日志归档、长任务超时策略和更好的执行可观测性。
+   已支持 `external` adapter 将 task-context 路径通过 prompt 交给任意兼容外部 agent 执行，`codex` 只是内置 Codex CLI 兼容入口；changedFiles 仍由 Run Loop git diff collector 统一采集。后续需要真实外部 agent smoke、日志归档、长任务超时策略和更好的执行可观测性。
 
 4. **Checks Runner 仍需深化真实后端策略**
 

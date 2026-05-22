@@ -36,6 +36,9 @@ function usage() {
     '  --codex-model <model>',
     '  --codex-timeout-ms 300000',
     '  --codex-extra-arg <arg>',
+    '  --external-agent-command <command>',
+    '  --external-agent-timeout-ms 300000',
+    '  --external-agent-extra-arg <arg>',
     '  --owner run-loop',
   ].join('\n');
 }
@@ -60,6 +63,9 @@ function parseArgs(argv) {
     'codex-model',
     'codex-timeout-ms',
     'codex-extra-arg',
+    'external-agent-command',
+    'external-agent-timeout-ms',
+    'external-agent-extra-arg',
     'owner',
   ]);
   for (let i = 2; i < argv.length; i += 1) {
@@ -72,8 +78,8 @@ function parseArgs(argv) {
     const key = arg.slice(2);
     if (!allowedKeys.has(key)) throw new Error(`未知参数：${arg}`);
     const value = argv[i + 1];
-    if (!value || (key !== 'codex-extra-arg' && value.startsWith('--'))) throw new Error(`参数 ${arg} 缺少值`);
-    if (key === 'codex-extra-arg') {
+    if (!value || (!['codex-extra-arg', 'external-agent-extra-arg'].includes(key) && value.startsWith('--'))) throw new Error(`参数 ${arg} 缺少值`);
+    if (['codex-extra-arg', 'external-agent-extra-arg'].includes(key)) {
       args[key] = [...(args[key] ?? []), value];
     } else {
       args[key] = value;
