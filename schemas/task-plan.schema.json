@@ -199,6 +199,53 @@
               "default": "default",
               "description": "鉴权模式。auth_disabled 只允许在 dev/test 环境使用，并且必须有恢复策略。"
             },
+            "tokenEnv": {
+              "type": "string",
+              "minLength": 1,
+              "description": "authenticated 检查使用的 token 环境变量名。"
+            },
+            "authHeader": {
+              "type": "string",
+              "minLength": 1,
+              "default": "Authorization",
+              "description": "注入 token 的请求头名称。默认 Authorization。"
+            },
+            "authScheme": {
+              "type": "string",
+              "default": "Bearer",
+              "description": "鉴权 scheme。默认 Bearer；空字符串表示直接使用 token。"
+            },
+            "environment": {
+              "type": "string",
+              "enum": ["dev", "test", "production", "unknown"],
+              "default": "unknown",
+              "description": "HTTP 检查执行环境。auth_disabled 只允许 dev/test。"
+            },
+            "expectedBody": {
+              "type": "object",
+              "description": "响应体断言。contains/notContains 做字符串包含判断，jsonFields 做简单点路径等值判断。",
+              "additionalProperties": false,
+              "properties": {
+                "contains": {
+                  "anyOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                },
+                "notContains": {
+                  "anyOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                },
+                "jsonFields": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": ["string", "number", "integer", "boolean", "null", "object", "array"]
+                  }
+                }
+              }
+            },
             "setupCommands": {
               "type": "array",
               "description": "检查前命令。用于临时关闭鉴权等高风险操作时必须可审计。",

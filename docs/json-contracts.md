@@ -225,6 +225,14 @@ needs_human
 
 用途：验证单个 task 的局部正确性，例如后端编译、接口单测、中台类型检查、客户端页面构建。
 
+HTTP check 使用 `http` 字段表达接口检查：
+
+- `expectedStatus` 负责表达 200、401、403、404 等状态码预期。
+- `authMode=anonymous` 不注入 token，适合未登录 401/404 等检查。
+- `authMode=authenticated` 可配 `tokenEnv`，Checks Runner 从环境变量读取 token 并注入请求头；默认 `authHeader=Authorization`、`authScheme=Bearer`。
+- `authMode=auth_disabled` 只允许 `environment=dev|test`，并且 schema 要求配置 `teardownCommands` 恢复鉴权。
+- `expectedBody.contains` / `notContains` 做字符串包含断言，`expectedBody.jsonFields` 做简单点路径等值断言。
+
 ### Story Acceptance Checks
 
 位置：`storyGroups[].acceptanceChecks`

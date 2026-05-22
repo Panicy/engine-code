@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validateFiles } from '../validator/validate-feature.mjs';
 import { runChecks } from '../checks-runner/index.mjs';
@@ -617,6 +617,331 @@ function testChecksRunnerRealHttp() {
   });
   assert(result.status === 'passed', '真实 HTTP 状态码匹配应通过');
   assert(result.checks.some((check) => check.id === 'real-http-pass' && check.status === 'passed'), '真实 HTTP 检查应记录 passed');
+}
+
+function writeHttpFixtureServer(baseDir) {
+  const serverPath = path.join(baseDir, 'http-fixture-server.mjs');
+  fs.writeFileSync(serverPath, `#!/usr/bin/env node
+import fs from 'node:fs';
+import http from 'node:http';
+const portFile = process.argv[2];
+const orderFile = process.argv[3];
+function writeJson(response, status, value) {
+  response.writeHead(status, { 'content-type': 'application/json' });
+  response.end(JSON.stringify(value));
+}
+function appendOrder(label) {
+  fs.appendFileSync(orderFile, label + '\\n', 'utf8');
+}
+const server = http.createServer((request, response) => {
+  const url = new URL(request.url, 'http://127.0.0.1');
+  const auth = request.headers.authorization || '';
+  if (url.pathname === '/anonymous') return writeJson(response, 401, { error: 'unauthorized' });
+  if (url.pathname === '/private') {
+    if (auth === 'Bearer good-token') return writeJson(response, 200, { ok: true, user: { id: 123, role: 'admin' }, message: 'welcome alpha' });
+    if (!auth) return writeJson(response, 401, { error: 'missing token' });
+    return writeJson(response, 403, { error: 'forbidden' });
+  }
+  if (url.pathname === '/echo-auth') return writeJson(response, 500, { echoedAuth: auth });
+  if (url.pathname === '/body') return writeJson(response, 200, { ok: true, nested: { value: 'yes' }, message: 'hello checks runner' });
+  if (url.pathname === '/text') {
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    return response.end('plain text response');
+  }
+  if (url.pathname === '/long') {
+    response.writeHead(500, { 'content-type': 'text/plain' });
+    return response.end('x'.repeat(1200));
+  }
+  if (url.pathname === '/auth-disabled') {
+    appendOrder('request');
+    return writeJson(response, 200, { ok: true });
+  }
+  return writeJson(response, 404, { error: 'missing' });
+});
+server.listen(0, '127.0.0.1', () => {
+  fs.writeFileSync(portFile, String(server.address().port), 'utf8');
+});
+`, 'utf8');
+  return serverPath;
+}
+
+function waitForFile(filePath, timeoutMs = 5000) {
+  const startedAt = Date.now();
+  const lock = new Int32Array(new SharedArrayBuffer(4));
+  while (!fs.existsSync(filePath)) {
+    if (Date.now() - startedAt > timeoutMs) throw new Error(`等待文件超时：${filePath}`);
+    Atomics.wait(lock, 0, 0, 10);
+  }
+}
+
+function withHttpFixtureServer(baseDir, fn) {
+  const serverPath = writeHttpFixtureServer(baseDir);
+  const portFile = path.join(baseDir, `http-fixture-port-${Date.now()}.txt`);
+  const orderFile = path.join(baseDir, `http-fixture-order-${Date.now()}.txt`);
+  fs.writeFileSync(orderFile, '', 'utf8');
+  const child = spawn(process.execPath, [serverPath, portFile, orderFile], {
+    cwd: repoRoot,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  try {
+    waitForFile(portFile);
+    const port = fs.readFileSync(portFile, 'utf8').trim();
+    return fn(`http://127.0.0.1:${port}`, orderFile);
+  } finally {
+    child.kill();
+  }
+}
+
+function runOneHttpCheck(http, options = {}) {
+  const result = runChecks({
+    id: 'TASK-HTTP',
+    checks: [
+      {
+        id: options.id ?? 'http-check',
+        name: options.name ?? 'HTTP check',
+        type: 'http',
+        required: true,
+        http,
+      },
+    ],
+  }, {
+    mode: options.mode ?? 'real',
+    cwd: options.cwd ?? repoRoot,
+    timeoutMs: options.timeoutMs ?? 10000,
+  });
+  return { result, check: result.checks[0] };
+}
+
+function withEnv(name, value, fn) {
+  const before = process.env[name];
+  if (value === null) delete process.env[name];
+  else process.env[name] = value;
+  try {
+    return fn();
+  } finally {
+    if (before === undefined) delete process.env[name];
+    else process.env[name] = before;
+  }
+}
+
+function testChecksRunnerHttpAnonymous401(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/anonymous`,
+      expectedStatus: 401,
+      authMode: 'anonymous',
+    });
+    assert(result.status === 'passed' && check.status === 'passed', 'anonymous 401 应通过 expectedStatus');
+  });
+}
+
+function testChecksRunnerHttpAuthenticatedToken(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => withEnv('ENGINE_E2E_TOKEN', 'good-token', () => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/private`,
+      expectedStatus: 200,
+      authMode: 'authenticated',
+      tokenEnv: 'ENGINE_E2E_TOKEN',
+    });
+    assert(result.status === 'passed' && check.status === 'passed', 'authenticated token 应注入并通过 200');
+  }));
+}
+
+function testChecksRunnerHttpAuthenticatedMissingToken(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => withEnv('ENGINE_E2E_TOKEN', null, () => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/private`,
+      expectedStatus: 200,
+      authMode: 'authenticated',
+      tokenEnv: 'ENGINE_E2E_TOKEN',
+    });
+    assert(result.status === 'checks_failed' && check.status === 'failed', '缺 token env 应失败');
+    assert(check.summary.includes('ENGINE_E2E_TOKEN') && !check.summary.includes('good-token'), '缺 token summary 不应泄露 token');
+  }));
+}
+
+function testChecksRunnerHttpMockModeDoesNotRequireToken() {
+  withEnv('ENGINE_E2E_TOKEN', null, () => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: 'http://127.0.0.1:1/private',
+      expectedStatus: 200,
+      authMode: 'authenticated',
+      tokenEnv: 'ENGINE_E2E_TOKEN',
+    }, { mode: 'mock' });
+    assert(result.status === 'passed' && check.status === 'passed', 'mock mode 不应真实发 HTTP 或要求 token');
+  });
+}
+
+function testChecksRunnerHttpForbiddenExpected(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => withEnv('ENGINE_E2E_TOKEN', 'bad-token', () => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/private`,
+      expectedStatus: 403,
+      authMode: 'authenticated',
+      tokenEnv: 'ENGINE_E2E_TOKEN',
+    });
+    assert(result.status === 'passed' && check.status === 'passed', 'bad token 403 可通过 expectedStatus 表达');
+  }));
+}
+
+function testChecksRunnerHttpMissingEndpoint404(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/missing`,
+      expectedStatus: 404,
+      authMode: 'anonymous',
+    });
+    assert(result.status === 'passed' && check.status === 'passed', 'missing endpoint 404 可通过 expectedStatus 表达');
+  });
+}
+
+function testChecksRunnerHttpStatusMismatchTruncatesBody(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/long`,
+      expectedStatus: 200,
+    });
+    assert(result.status === 'checks_failed' && check.status === 'failed', '状态码 mismatch 应失败');
+    assert(check.summary.includes('HTTP 500 expected 200'), 'mismatch summary 应包含状态码');
+    assert(check.summary.includes('<truncated>') && check.summary.length < 450, 'mismatch body 应截断');
+  });
+}
+
+function testChecksRunnerHttpRedactsEchoedToken(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => withEnv('ENGINE_E2E_TOKEN', 'super-secret-token-for-review', () => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/echo-auth`,
+      expectedStatus: 200,
+      authMode: 'authenticated',
+      tokenEnv: 'ENGINE_E2E_TOKEN',
+    });
+    assert(result.status === 'checks_failed' && check.status === 'failed', '回显 token 的失败响应仍应失败');
+    assert(!check.summary.includes('super-secret-token-for-review'), 'summary 不应泄露 token 原文');
+    assert(!check.summary.includes('Bearer super-secret-token-for-review'), 'summary 不应泄露 Authorization 原文');
+    assert(check.summary.includes('[REDACTED]'), 'summary 应包含脱敏标记');
+  }));
+}
+
+function testChecksRunnerHttpExpectedBodyPassFail(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => {
+    const pass = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/body`,
+      expectedStatus: 200,
+      expectedBody: {
+        contains: ['hello', 'checks runner'],
+        notContains: 'password',
+        jsonFields: {
+          ok: true,
+          'nested.value': 'yes',
+        },
+      },
+    });
+    assert(pass.result.status === 'passed' && pass.check.status === 'passed', 'contains/notContains/jsonFields 命中时应通过');
+
+    const fail = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/body`,
+      expectedStatus: 200,
+      expectedBody: {
+        contains: 'missing-fragment',
+        notContains: 'hello',
+        jsonFields: {
+          'nested.value': 'no',
+        },
+      },
+    });
+    assert(fail.result.status === 'checks_failed' && fail.check.status === 'failed', 'body assertion 不命中时应失败');
+    assert(fail.check.summary.includes('does not contain') && fail.check.summary.includes('contains forbidden') && fail.check.summary.includes('jsonFields nested.value'), 'body assertion 失败应说明原因');
+  });
+}
+
+function testChecksRunnerHttpJsonFieldsNonJsonFails(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/text`,
+      expectedStatus: 200,
+      expectedBody: {
+        jsonFields: { ok: true },
+      },
+    });
+    assert(result.status === 'checks_failed' && check.status === 'failed', '非 JSON 响应做 jsonFields 应失败');
+    assert(check.summary.includes('not valid JSON'), '非 JSON jsonFields 失败应说明 JSON 解析问题');
+  });
+}
+
+function testChecksRunnerHttpAuthDisabledOrder(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl, orderFile) => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/auth-disabled`,
+      expectedStatus: 200,
+      authMode: 'auth_disabled',
+      environment: 'test',
+      setupCommands: [`printf "setup\\n" >> ${orderFile}`],
+      teardownCommands: [`printf "teardown\\n" >> ${orderFile}`],
+    });
+    assert(result.status === 'passed' && check.status === 'passed', 'auth_disabled test 环境应可执行');
+    assert(fs.readFileSync(orderFile, 'utf8').trim().split('\n').join(',') === 'setup,request,teardown', 'auth_disabled 应按 setup/request/teardown 顺序执行');
+  });
+}
+
+function testChecksRunnerHttpAuthDisabledProductionRejected(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl, orderFile) => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/auth-disabled`,
+      expectedStatus: 200,
+      authMode: 'auth_disabled',
+      environment: 'production',
+      setupCommands: [`printf "setup\\n" >> ${orderFile}`],
+      teardownCommands: [`printf "teardown\\n" >> ${orderFile}`],
+    });
+    assert(result.status === 'checks_failed' && check.status === 'failed', 'auth_disabled production 应被拒绝');
+    assert(check.summary.includes('only allowed in dev/test'), 'production 拒绝 summary 应明确环境限制');
+    assert(fs.readFileSync(orderFile, 'utf8') === '', 'production 拒绝不应执行 setup/request/teardown');
+  });
+}
+
+function testChecksRunnerHttpRequestFailureStillTeardown(baseDir) {
+  const orderFile = path.join(baseDir, 'request-failure-teardown-order.txt');
+  fs.writeFileSync(orderFile, '', 'utf8');
+  const { result, check } = runOneHttpCheck({
+    method: 'GET',
+    url: 'http://127.0.0.1:1/unreachable',
+    expectedStatus: 200,
+    authMode: 'auth_disabled',
+    environment: 'dev',
+    setupCommands: [`printf "setup\\n" >> ${orderFile}`],
+    teardownCommands: [`printf "teardown\\n" >> ${orderFile}`],
+  }, { timeoutMs: 1000 });
+  assert(result.status === 'checks_failed' && check.status === 'failed', 'request 失败应让 check failed');
+  assert(fs.readFileSync(orderFile, 'utf8').trim().split('\n').join(',') === 'setup,teardown', 'request 失败也应执行 teardown');
+}
+
+function testChecksRunnerHttpTeardownFailure(baseDir) {
+  withHttpFixtureServer(baseDir, (baseUrl) => {
+    const { result, check } = runOneHttpCheck({
+      method: 'GET',
+      url: `${baseUrl}/auth-disabled`,
+      expectedStatus: 200,
+      authMode: 'auth_disabled',
+      environment: 'dev',
+      setupCommands: [],
+      teardownCommands: [`${process.execPath} -e "process.exit(9)"`],
+    });
+    assert(result.status === 'checks_failed' && check.status === 'failed', 'teardown 失败应让 check failed');
+    assert(check.summary.includes('teardown') && check.summary.includes('requires human'), 'teardown 失败 summary 应提示 requires human');
+  });
 }
 
 function reviewFixture({ allowedPaths, changedFiles, outcomeChangedFiles = [] }) {
@@ -1273,6 +1598,20 @@ const tests = [
   ['Checks Runner 定点失败', testChecksRunnerFailure],
   ['Checks Runner 真实命令', testChecksRunnerRealCommand],
   ['Checks Runner 真实 HTTP', testChecksRunnerRealHttp],
+  ['Checks Runner HTTP anonymous 401', testChecksRunnerHttpAnonymous401],
+  ['Checks Runner HTTP authenticated token', testChecksRunnerHttpAuthenticatedToken],
+  ['Checks Runner HTTP authenticated 缺 token', testChecksRunnerHttpAuthenticatedMissingToken],
+  ['Checks Runner HTTP mock 不要求 token', testChecksRunnerHttpMockModeDoesNotRequireToken],
+  ['Checks Runner HTTP 403 expected', testChecksRunnerHttpForbiddenExpected],
+  ['Checks Runner HTTP 404 expected', testChecksRunnerHttpMissingEndpoint404],
+  ['Checks Runner HTTP mismatch body 截断', testChecksRunnerHttpStatusMismatchTruncatesBody],
+  ['Checks Runner HTTP token 脱敏', testChecksRunnerHttpRedactsEchoedToken],
+  ['Checks Runner HTTP expectedBody', testChecksRunnerHttpExpectedBodyPassFail],
+  ['Checks Runner HTTP 非 JSON jsonFields', testChecksRunnerHttpJsonFieldsNonJsonFails],
+  ['Checks Runner HTTP auth_disabled 顺序', testChecksRunnerHttpAuthDisabledOrder],
+  ['Checks Runner HTTP auth_disabled production 拒绝', testChecksRunnerHttpAuthDisabledProductionRejected],
+  ['Checks Runner HTTP request 失败仍 teardown', testChecksRunnerHttpRequestFailureStillTeardown],
+  ['Checks Runner HTTP teardown 失败', testChecksRunnerHttpTeardownFailure],
   ['Review Runner allowedPaths 全命中', testReviewAllowedPathsPass],
   ['Review Runner allowedPaths 越界失败', testReviewAllowedPathsFail],
   ['Review Runner allowedPaths 目录边界', testReviewAllowedPathsGlobBoundary],

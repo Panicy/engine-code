@@ -141,11 +141,11 @@
 - [x] 结构化记录 check command/status/summary。
 - [x] 支持 expectedStatus。
 - [x] 支持 setupCommands/teardownCommands。
-- [ ] 支持 anonymous/authenticated/auth_disabled 的令牌和环境策略。
-- [ ] auth_disabled 强制 dev/test 环境。
+- [x] 支持 anonymous/authenticated/auth_disabled 的令牌和环境策略。
+- [x] auth_disabled 强制 dev/test 环境。
 - [x] auth_disabled schema 层强制 teardown。
 - [ ] teardown 失败时标记 needs_human。
-- [ ] 支持响应 body 断言。
+- [x] 支持响应 body 断言。
 
 完成标准：
 
@@ -260,9 +260,9 @@
 
 近期建议按以下顺序推进：
 
-1. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
-2. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
-3. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
+1. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
+2. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
+3. Checks Runner 增强，补 teardown 失败直达 needs_human、更多响应断言和真实后端 token 策略。
 4. Codex Agent Adapter 增强，补真实 Codex smoke、日志归档和长任务可观测性。
 5. Project Init 增强，补 workspace 注册、模板版本管理和可选 clone 策略。
 6. Recovery 增强，补批量恢复、stale running 处理和 cancelled reopen 策略。
@@ -301,9 +301,9 @@ JSON Contracts
 
    已支持 `codex` adapter 将 task-context 路径通过 prompt 交给 Codex 执行，并保持 changedFiles 由 Run Loop git diff collector 统一采集。后续需要真实 Codex smoke、日志归档、长任务超时策略和更好的执行可观测性。
 
-4. **Checks Runner 的鉴权能力还不完整**
+4. **Checks Runner 仍需深化真实后端策略**
 
-   HTTP 已能真实请求和校验状态码，但 token 注入、401/403 专项断言、404 专项断言、响应体断言、auth_disabled 环境白名单仍未完善。
+   HTTP 已支持 tokenEnv 注入、anonymous/authenticated/auth_disabled、401/403/404、响应体断言和 token 脱敏。后续还需要 teardown 失败直达 needs_human、真实后端 token 获取策略和更丰富的响应断言。
 
 5. **Review Runner 还偏确定性规则**
 

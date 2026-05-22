@@ -437,6 +437,10 @@ Checks Runner 由 Run Loop 调用，但建议作为独立模块。
 - `command`：`real` 的兼容别名。
 - `mock`：开发回归模式，生成通过结果或定点失败。
 - `manual`：只生成待人工验证项，不自动执行。
+- HTTP `anonymous`：不注入 token，适合 401/404 等状态码检查。
+- HTTP `authenticated`：通过 `tokenEnv` 读取 token 并注入请求头，默认 `Authorization: Bearer <token>`。
+- HTTP `auth_disabled`：只允许 `environment=dev|test`，`production` 或缺省 `unknown` 直接失败。
+- HTTP `expectedBody`：支持 `contains`、`notContains` 和简单点路径 `jsonFields`。
 
 后端重点检查：
 
@@ -452,14 +456,13 @@ Checks Runner 由 Run Loop 调用，但建议作为独立模块。
 - 只允许在 dev/test 环境执行。
 - 必须先记录原始配置。
 - 必须配置 teardown 恢复鉴权。
-- teardown 恢复失败时，当前 task 直接标记 `needs_human`。
+- teardown 恢复失败时，check failed，并在 summary 中明确提示 `requires human`；后续可增强为 Run Loop 直达 `needs_human`。
 - 不允许在 production 环境执行 `auth_disabled` 检查。
 
 当前缺口：
 
-- token 注入尚未实现。
-- 响应体断言尚未实现。
-- auth_disabled 的环境白名单和恢复校验还需要增强。
+- 更复杂的响应体断言尚未实现。
+- teardown 失败后 Run Loop 直达 `needs_human` 还需要增强。
 
 ### Reviewer
 
