@@ -426,7 +426,7 @@ Agent Adapter 是 Run Loop 和真实执行器之间的边界。
 
 后续需要接入：
 
-- `codex`：读取 task-context，调用真实 Codex 执行开发任务，并输出 summary、errors。真实 changedFiles 应由 git diff 自动采集。
+- `codex`：读取 task-context，调用真实 Codex 执行开发任务，并输出 summary、errors。真实 changedFiles 由 Run Loop 从目标基座 git diff 自动采集。
 
 Adapter 只返回执行 outcome，不直接修改 run-state，不直接写 task-run/review，不绕过 checks 和 review。
 
@@ -494,14 +494,13 @@ Reviewer 必须检查：
 
 当前已实现：
 
-- 检查 changedFiles 是否全部匹配 task.allowedPaths。
 - 检查必需 checks 是否都有结果且为 passed。
 - 写入标准 review.json。
 - review 失败时让 task 进入 review_failed，下一轮可重跑。
 
 当前缺口：
 
-- 不接受 adapter 自报 changedFiles 作为审查依据，尚未从 git diff 自动采集。
+- 不接受 adapter 自报 changedFiles 作为审查依据；Run Loop 已能从 git diff 采集，但 Review Runner 尚未恢复 allowedPaths 审查。
 - 未读取真实文件内容。
 - 未检查 skill qualityGates。
 - 未做后端/中台/客户端专项规则。

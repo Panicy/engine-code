@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validateFiles, validateSchema } from '../validator/validate-feature.mjs';
 import { availableAgentAdapters, createAgentAdapter } from '../agent-adapters/index.mjs';
@@ -100,6 +102,67 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function runGit(workspaceAbs, args) {
+  return spawnSync('git', args, {
+    cwd: workspaceAbs,
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
+  });
+}
+
+function assertGitWorkspace(workspaceAbs) {
+  const result = runGit(workspaceAbs, ['rev-parse', '--is-inside-work-tree']);
+  if (result.error || result.status !== 0 || result.stdout.trim() !== 'true') {
+    const detail = [result.error?.message, result.stderr, result.stdout].filter(Boolean).join('\n').trim();
+    throw new Error(`base workspace 不是 git 仓库：${workspaceAbs}${detail ? ` (${detail})` : ''}`);
+  }
+}
+
+function fileFingerprint(workspaceAbs, filePath) {
+  const abs = path.resolve(workspaceAbs, filePath);
+  const relative = path.relative(workspaceAbs, abs);
+  if (relative.startsWith('..') || path.isAbsolute(relative) || !fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+    return '';
+  }
+  return crypto.createHash('sha1').update(fs.readFileSync(abs)).digest('hex');
+}
+
+function parseGitStatusPorcelainZ(output, workspaceAbs) {
+  const entries = output.split('\0').filter(Boolean);
+  const files = new Map();
+  for (let i = 0; i < entries.length; i += 1) {
+    const entry = entries[i];
+    if (entry.length < 4) continue;
+    const status = entry.slice(0, 2);
+    const filePath = entry.slice(3);
+    if (!filePath) continue;
+    if (status[0] === 'R' || status[1] === 'R' || status[0] === 'C' || status[1] === 'C') {
+      files.set(filePath, `${status}:${fileFingerprint(workspaceAbs, filePath)}`);
+      if (entries[i + 1]) i += 1;
+      continue;
+    }
+    files.set(filePath, `${status}:${fileFingerprint(workspaceAbs, filePath)}`);
+  }
+  return files;
+}
+
+function collectGitDiffSnapshot(workspaceAbs) {
+  assertGitWorkspace(workspaceAbs);
+  const result = runGit(workspaceAbs, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', '.']);
+  if (result.error || result.status !== 0) {
+    const detail = [result.error?.message, result.stderr, result.stdout].filter(Boolean).join('\n').trim();
+    throw new Error(`采集 git diff 失败：${workspaceAbs}${detail ? ` (${detail})` : ''}`);
+  }
+  return parseGitStatusPorcelainZ(result.stdout, workspaceAbs);
+}
+
+function changedFilesBetweenSnapshots(before, after) {
+  return [...after.entries()]
+    .filter(([filePath, status]) => before.get(filePath) !== status)
+    .map(([filePath]) => filePath)
+    .sort();
+}
+
 function addMinutesIso(minutes) {
   return new Date(Date.now() + minutes * 60 * 1000).toISOString();
 }
@@ -190,7 +253,7 @@ function buildPromptInputs({ task, args, taskContextPath }) {
   ];
 }
 
-function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args, outcome, taskContextPath }) {
+function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args, outcome, taskContextPath, changedFiles }) {
   const item = {
     attempt,
     status,
@@ -198,7 +261,7 @@ function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, 
     startedAt,
     finishedAt,
     promptInputs: buildPromptInputs({ task, args, taskContextPath }),
-    changedFiles: [],
+    changedFiles: changedFiles ?? [],
     checks: outcome.checks ?? [],
     summary: outcome.summary ?? '',
     errors: outcome.errors ?? [],
@@ -425,6 +488,7 @@ function runLoop(args) {
           runState.artifacts.push({ type: 'taskContext', path: taskContextPath });
         }
 
+        const beforeGitSnapshot = collectGitDiffSnapshot(taskContext.base.workspaceAbs);
         const outcome = adapter.execute({
           args,
           project,
@@ -438,6 +502,8 @@ function runLoop(args) {
           startedAt: startedTaskAt,
         });
         validateAdapterOutcome(outcome, adapter.id);
+        const afterGitSnapshot = collectGitDiffSnapshot(taskContext.base.workspaceAbs);
+        const changedFiles = changedFilesBetweenSnapshots(beforeGitSnapshot, afterGitSnapshot);
         const checkResult = runChecks(task, {
           mode: checksMode,
           cwd: taskContext.base.workspaceAbs,
@@ -467,6 +533,7 @@ function runLoop(args) {
           lastIssue,
           args,
           taskContextPath,
+          changedFiles,
           outcome: {
             ...normalizedOutcome,
             summary: desiredStatus === 'done'

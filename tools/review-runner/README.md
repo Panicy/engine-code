@@ -11,7 +11,7 @@ Review Runner 在 task 执行和 checks 之后运行，用于生成标准 `revie
 ## 暂不做
 
 - 不接受 Agent Adapter 自报的 `changedFiles` 作为 allowedPaths 审查依据。
-- allowedPaths 审查需要等 git diff 自动采集真实改动文件后再启用。
+- allowedPaths 审查尚未启用；后续应只使用 Run Loop 从 git diff 采集的可信 `changedFiles`。
 
 ## 边界
 

@@ -38,7 +38,7 @@
 | Skill Context | done | `tools/skill-context/` | 已能为单个 task 装配 project/base/template/PRD/task/skill 上下文 |
 | Agent Adapter | in_progress | `tools/agent-adapters/` | 已支持 `mock` 和 `shell`，待接入真实 Codex adapter |
 | Checks Runner | in_progress | `tools/checks-runner/` | 默认真实执行 command/http checks，支持 mock 回归模式 |
-| Review Runner | in_progress | `tools/review-runner/` | 已支持 allowedPaths 和必需 checks 的确定性审查，待增强语义审查 |
+| Review Runner | in_progress | `tools/review-runner/` | 已支持必需 checks 的确定性审查；待基于可信 changedFiles 恢复 allowedPaths 审查并增强语义审查 |
 | 运行产物写入器 | in_progress | `tools/run-loop/run-feature.mjs` | 已原子写入 task-context/task-run/review/run-state/loop-summary，待抽成独立模块 |
 | 数据库变更执行辅助 | todo | - | 从 database-changes 到 SQL 检查、菜单权限 SQL 检查 |
 | 跨端契约生成与消费 | todo | - | backend-api、permission-manifest 的生成、校验和消费 |
@@ -117,7 +117,7 @@
 - [x] 每轮前后调用 Validator。
 - [ ] 实现 stale running 恢复策略。
 - [ ] 接入真实 Codex Agent Adapter。
-- [ ] 自动采集 git diff changedFiles。
+- [x] 自动采集 git diff changedFiles。
 
 完成标准：
 
@@ -167,7 +167,7 @@
 - [ ] 基于 git diff 识别越界改动。
 - [ ] 识别高风险改动并返回 needs_human。
 - [x] 写入 review.json。
-- [ ] 自动读取 git diff，避免依赖 adapter 自报 changedFiles。
+- [x] 自动读取 git diff，避免依赖 adapter 自报 changedFiles。
 - [ ] 增加后端/中台/客户端专项 review 规则。
 
 完成标准：
@@ -259,7 +259,7 @@
 
 近期建议按以下顺序推进：
 
-1. 自动采集 git diff changedFiles，补齐 Review Runner 可信输入。
+1. 基于可信 changedFiles 恢复 Review Runner allowedPaths 审查。
 2. M5 Project 与 Feature 初始化，降低多项目接入成本。
 3. Codex Agent Adapter，把 task-context 交给真实开发执行器。
 4. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
@@ -288,9 +288,9 @@ JSON Contracts
 
 ## 当前架构缺陷
 
-1. **Review Runner 缺少可信 changedFiles 输入**
+1. **Review Runner 尚未恢复 allowedPaths 审查**
 
-   已删除 adapter 自报 changedFiles 的审查入口，避免把不可信输入当作安全依据。下一步应从 git diff 自动采集真实改动，并将其作为 allowedPaths review 的唯一可信输入。
+   已删除 adapter 自报 changedFiles 的审查入口，避免把不可信输入当作安全依据。Run Loop 已从目标基座 git diff 自动采集真实改动；下一步应将其作为 allowedPaths review 的唯一可信输入。
 
 2. **Project/Workspace 管理仍然缺位**
 
@@ -298,7 +298,7 @@ JSON Contracts
 
 3. **Agent Adapter 还没有真正的 Codex 执行器**
 
-   `shell` adapter 证明了执行器插槽可用，但它不是面向开发任务的真实 agent。后续需要 `codex` adapter 读取 task-context，执行受控开发，并输出 summary/errors；changedFiles 应由 git diff 自动采集。
+   `shell` adapter 证明了执行器插槽可用，但它不是面向开发任务的真实 agent。后续需要 `codex` adapter 读取 task-context，执行受控开发，并输出 summary/errors；changedFiles 继续由 Run Loop 的 git diff collector 统一采集。
 
 4. **Checks Runner 的鉴权能力还不完整**
 

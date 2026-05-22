@@ -20,6 +20,7 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapt
 - 支持失败 mock，用于验证异常状态和复跑入口。
 - 同一轮内每个 task 最多执行一次，失败任务留到下一轮重跑。
 - `task-run.json` 会追加 attempts，不覆盖历史。
+- `task-run.json` 的 `changedFiles` 由目标基座 git diff 自动采集，不接受 adapter 自报。
 - 调用 Validator 做后置校验。
 
 ## 使用方式
@@ -58,6 +59,8 @@ node tools/run-loop/run-feature.mjs \
 
 Adapter 只返回单个 task 的执行 outcome，不直接修改 `run-state.json`，也不直接写 `task-run.json` 或 `review.json`。状态流转、重试耗尽、运行锁释放和产物写入仍由 Run Loop 统一处理。
 
+Run Loop 会在 adapter 执行前后读取当前 task 对应 base workspace 的 git 状态，自动计算本次 attempt 的 `changedFiles`。base workspace 必须是 git 仓库；否则任务会进入 `needs_human`，避免产出误导性的空变更列表。
+
 Shell 示例：
 
 ```bash
@@ -89,7 +92,7 @@ Run Loop 会在 adapter 成功且 checks 通过后运行 Review Runner。当前 
 
 Review 失败时，任务进入 `review_failed`，并写入 `runs/<taskId>/review.json`。
 
-注意：Review Runner 暂不接受 adapter 自报的 `changedFiles` 作为 allowedPaths 审查依据。后续只能通过 git diff 自动采集真实改动文件后再启用该类审查。
+注意：Review Runner 暂不执行 allowedPaths 审查；`changedFiles` 已改为由 git diff 采集，下一步可以基于该可信输入恢复 allowedPaths 审查。
 
 ## Mock 失败
 

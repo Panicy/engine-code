@@ -78,6 +78,21 @@ function runNode(args, options = {}) {
   return result;
 }
 
+function runCommand(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd ?? repoRoot,
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    throw new Error([
+      `命令失败：${command} ${args.join(' ')}`,
+      result.stdout.trim(),
+      result.stderr.trim(),
+    ].filter(Boolean).join('\n'));
+  }
+  return result;
+}
+
 function parseCommandJson(result) {
   try {
     return JSON.parse(result.stdout);
@@ -123,6 +138,21 @@ function writeProjectWithWorkspace(baseDir, fileName, workspace) {
   const outputPath = path.join(baseDir, fileName);
   fs.writeFileSync(outputPath, `${JSON.stringify(project, null, 2)}\n`, 'utf8');
   return outputPath;
+}
+
+function initGitWorkspace(workspace, files = {}) {
+  fs.mkdirSync(workspace, { recursive: true });
+  runCommand('git', ['init'], { cwd: workspace });
+  runCommand('git', ['config', 'user.email', 'e2e@example.test'], { cwd: workspace });
+  runCommand('git', ['config', 'user.name', 'Engine E2E'], { cwd: workspace });
+  for (const [filePath, content] of Object.entries(files)) {
+    const abs = path.join(workspace, filePath);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, 'utf8');
+  }
+  fs.writeFileSync(path.join(workspace, '.gitignore'), '.DS_Store\n', 'utf8');
+  runCommand('git', ['add', '.'], { cwd: workspace });
+  runCommand('git', ['commit', '-m', 'baseline'], { cwd: workspace });
 }
 
 function createFeature(baseDir, featureId, options = {}) {
@@ -193,6 +223,9 @@ function validateFeature(paths) {
 }
 
 function prepareApprovedFeature(baseDir, featureId, options = {}) {
+  if (!options.projectPath) {
+    options.projectPath = writeProjectWithWorkspace(baseDir, `${featureId}-project.json`, options.workspace ?? '.');
+  }
   const paths = createFeature(baseDir, featureId, options);
   approvePrd(paths);
   createTaskPlan(paths);
@@ -365,10 +398,89 @@ function testShellAdapterSuccess(baseDir) {
   assert(taskRun.attempts[0].summary.includes('shell-ok'), 'task-run 应记录 shell 输出摘要');
 }
 
+function prepareGitDiffFeature(baseDir, featureId, files = {}) {
+  const workspace = path.join(baseDir, featureId, 'workspace');
+  initGitWorkspace(workspace, files);
+  const localProjectPath = writeProjectWithWorkspace(baseDir, `${featureId}-project.json`, workspace);
+  return prepareApprovedFeature(baseDir, featureId, { projectPath: localProjectPath, bases: 'backend' });
+}
+
+function firstAttemptChangedFiles(paths) {
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  return taskRun.attempts[0].changedFiles;
+}
+
+function testGitDiffCollectsModifiedFile(baseDir) {
+  const paths = prepareGitDiffFeature(baseDir, 'git-diff-modified', { 'src/app.txt': 'before\n' });
+  runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "require('fs').writeFileSync('src/app.txt','after\\n')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(firstAttemptChangedFiles(paths).includes('src/app.txt'), '修改文件应写入 changedFiles 相对路径');
+}
+
+function testGitDiffCollectsAddedFile(baseDir) {
+  const paths = prepareGitDiffFeature(baseDir, 'git-diff-added');
+  runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "require('fs').mkdirSync('src',{recursive:true});require('fs').writeFileSync('src/new.txt','new\\n')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(firstAttemptChangedFiles(paths).includes('src/new.txt'), '新增文件应写入 changedFiles 相对路径');
+}
+
+function testGitDiffCollectsMultipleFiles(baseDir) {
+  const paths = prepareGitDiffFeature(baseDir, 'git-diff-multiple', {
+    'src/a.txt': 'before-a\n',
+    'src/delete-me.txt': 'delete\n',
+  });
+  runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "const fs=require('fs');fs.writeFileSync('src/a.txt','after-a\\n');fs.writeFileSync('src/b.txt','new-b\\n');fs.unlinkSync('src/delete-me.txt')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(firstAttemptChangedFiles(paths).join(',') === 'src/a.txt,src/b.txt,src/delete-me.txt', '同一 attempt 的多文件变更应按相对路径排序写入 changedFiles');
+}
+
+function testGitDiffCollectsDeletedFile(baseDir) {
+  const paths = prepareGitDiffFeature(baseDir, 'git-diff-deleted', { 'src/delete-me.txt': 'delete\n' });
+  runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "require('fs').unlinkSync('src/delete-me.txt')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(firstAttemptChangedFiles(paths).includes('src/delete-me.txt'), '删除文件应写入 changedFiles 相对路径');
+}
+
+function testGitDiffIgnoresRestoredFile(baseDir) {
+  const paths = prepareGitDiffFeature(baseDir, 'git-diff-restored', { 'src/restored.txt': 'original\n' });
+  runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "require('fs').writeFileSync('src/restored.txt','temporary\\n');require('fs').writeFileSync('src/restored.txt','original\\n')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(!firstAttemptChangedFiles(paths).includes('src/restored.txt'), '恢复原内容的文件不应写入 changedFiles');
+}
+
+function testGitDiffRequiresGitWorkspace(baseDir) {
+  const workspace = path.join(baseDir, 'non-git-workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+  const localProjectPath = writeProjectWithWorkspace(baseDir, 'non-git-workspace-project.json', workspace);
+  const paths = prepareApprovedFeature(baseDir, 'non-git-workspace', { projectPath: localProjectPath, bases: 'backend' });
+  const result = runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--shell-command', `${process.execPath} -e "console.log('should-not-run')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), '非 git workspace 应进入 needsHuman');
+  const runState = readJson(paths.runState);
+  assert(runState.taskStates['TASK-001'].lastIssue.summary.includes('不是 git 仓库'), '非 git workspace 应记录明确失败原因');
+}
+
 function testRealChecksUseBaseWorkspace(baseDir) {
   const workspace = path.join(baseDir, 'real-check-workspace');
-  fs.mkdirSync(workspace, { recursive: true });
-  fs.writeFileSync(path.join(workspace, 'base-marker.txt'), 'ok\n', 'utf8');
+  initGitWorkspace(workspace, { 'base-marker.txt': 'ok\n' });
   const localProjectPath = writeProjectWithWorkspace(baseDir, 'real-check-workspace-project.json', workspace);
   const paths = prepareApprovedFeature(baseDir, 'real-check-workspace', { projectPath: localProjectPath, bases: 'backend' });
   const taskPlan = readJson(paths.taskPlan);
@@ -436,6 +548,12 @@ const tests = [
   ['Checks Runner 真实命令', testChecksRunnerRealCommand],
   ['Checks Runner 真实 HTTP', testChecksRunnerRealHttp],
   ['Shell Adapter 成功执行', testShellAdapterSuccess],
+  ['Git Diff Collector 采集修改文件', testGitDiffCollectsModifiedFile],
+  ['Git Diff Collector 采集新增文件', testGitDiffCollectsAddedFile],
+  ['Git Diff Collector 采集多文件', testGitDiffCollectsMultipleFiles],
+  ['Git Diff Collector 采集删除文件', testGitDiffCollectsDeletedFile],
+  ['Git Diff Collector 忽略恢复文件', testGitDiffIgnoresRestoredFile],
+  ['Git Diff Collector 要求 git workspace', testGitDiffRequiresGitWorkspace],
   ['Run Loop 真实检查使用基座目录', testRealChecksUseBaseWorkspace],
   ['Shell Adapter 缺少命令', testShellAdapterMissingCommand],
   ['评审失败复跑入口', testReviewFailureRetry],
