@@ -26,7 +26,13 @@ node tools/e2e/run-engine-e2e.mjs --keep-tmp
 
 ## 真实需求 E2E
 
-`run-real-demand-e2e.mjs` 会复制真实客户端基座 `.engine/source-templates/uniapp-template` 到 `/private/tmp`，初始化临时 git baseline，然后通过 Project Init、PRD、task-plan、Run Loop、真实文件修改、真实 `npm test`、Review Runner 和产物断言验证一条可重复的需求执行链路。
+`run-real-demand-e2e.mjs` 是真实需求场景库 runner。它会复制 `.engine/source-templates/<template>` 到 `/private/tmp`，初始化临时 git baseline，然后通过 Project Init、PRD、task-plan、Run Loop、真实文件修改、真实 checks、Review Runner 和产物断言验证一条可重复的需求执行链路。默认使用 shell adapter 做确定性修改，不污染源模板。
+
+查看可用场景：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs --list-scenarios
+```
 
 默认场景：
 
@@ -42,7 +48,7 @@ node tools/e2e/run-real-demand-e2e.mjs \
   --adapter shell
 ```
 
-默认使用 shell adapter 修改 `/private/tmp` 中的基座副本，不会修改 `.engine/source-templates` 源模板。该场景断言：
+`client-announcement-tags` 会复制 `uniapp-template`，修改 `/private/tmp` 中的基座副本，并运行真实 `npm test`。该场景断言：
 
 - `project.json`、`prd.json`、`task-plan.json`、`run-state.json` 可初始化并确认。
 - Run Loop 执行真实 shell 修改。
@@ -51,6 +57,22 @@ node tools/e2e/run-real-demand-e2e.mjs \
 - `changedFiles` 仅包含 `pages-workspace/home/index.vue` 和 `tests/foundation.test.js`。
 - Review Runner allowedPaths 审查通过。
 - `run-state` 中 `TASK-001` 为 `done`，`loop-summary` 为 `complete`。
+
+轻量后端场景：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs --scenario backend-sql-migration-smoke
+```
+
+该场景复制 `backend-starter`，新增 `script/sql/engine_e2e_notice_tag.sql`，使用 `node -e` 静态断言 SQL 文件包含业务表和权限码。默认不运行 Maven、不启动后端、不连接数据库。
+
+轻量中台场景：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs --scenario middle-notice-page-smoke
+```
+
+该场景复制 `middle-starter`，新增公告标签 API 封装和页面文件，使用 `node -e` 静态断言 API 路径和权限码。默认不运行 pnpm install/build，不启动前端服务。
 
 负向 review 场景：
 
