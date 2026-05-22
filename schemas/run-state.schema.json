@@ -59,12 +59,19 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "text", "createdAt"],
+        "required": ["id", "text", "createdAt", "taskId", "action", "fromStatus", "toStatus", "by", "reason", "decidedAt"],
         "additionalProperties": false,
         "properties": {
           "id": { "type": "string" },
           "text": { "type": "string" },
-          "createdAt": { "type": "string", "format": "date-time" }
+          "createdAt": { "type": "string", "format": "date-time" },
+          "taskId": { "type": "string", "pattern": "^TASK-[0-9]{3}$" },
+          "action": { "type": "string", "enum": ["retry", "cancel"] },
+          "fromStatus": { "type": "string", "enum": ["draft", "pending", "ready", "running", "checks_failed", "review_failed", "needs_human", "done", "cancelled"] },
+          "toStatus": { "type": "string", "enum": ["draft", "pending", "ready", "running", "checks_failed", "review_failed", "needs_human", "done", "cancelled"] },
+          "by": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "decidedAt": { "type": "string", "format": "date-time" }
         }
       },
       "default": []

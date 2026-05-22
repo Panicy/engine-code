@@ -40,6 +40,7 @@
 | Checks Runner | in_progress | `tools/checks-runner/` | 默认真实执行 command/http checks，支持 mock 回归模式 |
 | Review Runner | in_progress | `tools/review-runner/` | 已支持必需 checks 和基于可信 changedFiles 的 allowedPaths 审查，待增强语义审查 |
 | 运行产物写入器 | in_progress | `tools/run-loop/run-feature.mjs` | 已原子写入 task-context/task-run/review/run-state/loop-summary，待抽成独立模块 |
+| 异常恢复工具 | in_progress | `tools/recovery/` | 已支持异常任务查看、task 详情查看、retry/cancel 恢复和人工决策记录 |
 | 数据库变更执行辅助 | todo | - | 从 database-changes 到 SQL 检查、菜单权限 SQL 检查 |
 | 跨端契约生成与消费 | todo | - | backend-api、permission-manifest 的生成、校验和消费 |
 | 简版 CLI | later | - | 当前阶段暂不考虑 CLI，后续围绕 validator/run-loop 暴露命令 |
@@ -259,12 +260,12 @@
 
 近期建议按以下顺序推进：
 
-1. 异常恢复工具，支持查看 attempts、恢复 needs_human、重跑异常任务。
-2. Codex Agent Adapter，把 task-context 交给真实开发执行器。
-3. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
-4. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
-5. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
-6. Project Init 增强，补 workspace 注册、模板版本管理和可选 clone 策略。
+1. Codex Agent Adapter，把 task-context 交给真实开发执行器。
+2. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
+3. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
+4. 真实需求 E2E 套件，将临时真实需求测试沉淀为可重复脚本。
+5. Project Init 增强，补 workspace 注册、模板版本管理和可选 clone 策略。
+6. Recovery 增强，补批量恢复、stale running 处理和 cancelled reopen 策略。
 
 ## 当前整体架构
 

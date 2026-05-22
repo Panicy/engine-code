@@ -358,7 +358,7 @@ Schema：`schemas/skills.schema.json`
 - `taskStates`
 - `completedTasks`
 - `artifacts`
-- `decisions`
+- `decisions`：人工恢复和取消等决策记录。每条决策包含 `taskId`、`action`、`fromStatus`、`toStatus`、`by`、`reason`、`decidedAt`，用于追溯异常恢复操作。
 
 Schema：`schemas/run-state.schema.json`
 

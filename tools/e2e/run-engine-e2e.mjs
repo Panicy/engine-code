@@ -231,10 +231,26 @@ function runProjectInitCreateFeature(args, options = {}) {
   return parseCommandJson(runNode(['tools/project-init/create-feature.mjs', ...args], options));
 }
 
+function runRecoveryListIssues(args, options = {}) {
+  return parseCommandJson(runNode(['tools/recovery/list-issues.mjs', ...args], options));
+}
+
+function runRecoveryShowTask(args, options = {}) {
+  return parseCommandJson(runNode(['tools/recovery/show-task.mjs', ...args], options));
+}
+
+function runRecoveryResolveTask(args, options = {}) {
+  return parseCommandJson(runNode(['tools/recovery/resolve-task.mjs', ...args], options));
+}
+
 function createProjectInitWorkspace(baseDir, name) {
   const workspace = path.join(baseDir, name);
   fs.mkdirSync(workspace, { recursive: true });
   return workspace;
+}
+
+function writeJsonFile(filePath, value) {
+  fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
 function prepareApprovedFeature(baseDir, featureId, options = {}) {
@@ -866,6 +882,197 @@ function testNeedsHuman(baseDir) {
   assert(runState.activeRunLock === null, '异常后 activeRunLock 应释放');
 }
 
+function issueFixture(summary, source = 'orchestrator') {
+  return {
+    type: 'e2e_issue',
+    summary,
+    source,
+    requiredDecision: '',
+    createdAt: '2026-05-22T00:00:00.000Z',
+  };
+}
+
+function setTaskStatus(paths, taskId, status, lastIssue = null) {
+  const runState = readJson(paths.runState);
+  runState.taskStates[taskId].status = status;
+  runState.taskStates[taskId].lastIssue = lastIssue;
+  runState.taskStates[taskId].updatedAt = '2026-05-22T00:00:00.000Z';
+  writeJsonFile(paths.runState, runState);
+  return runState;
+}
+
+function resolveArgs(paths, taskId, action = 'retry') {
+  return [
+    '--run-state', paths.runState,
+    '--task-id', taskId,
+    '--action', action,
+    '--by', 'e2e',
+    '--reason', `${action} for e2e`,
+  ];
+}
+
+function testRecoveryListIssues(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-list-issues');
+  const runState = readJson(paths.runState);
+  runState.taskStates['TASK-001'].status = 'checks_failed';
+  runState.taskStates['TASK-001'].lastIssue = issueFixture('check failed', 'check');
+  runState.taskStates['TASK-002'].status = 'review_failed';
+  runState.taskStates['TASK-002'].lastIssue = issueFixture('review failed', 'reviewer');
+  runState.taskStates['TASK-003'].status = 'needs_human';
+  runState.taskStates['TASK-003'].lastIssue = issueFixture('needs human');
+  writeJsonFile(paths.runState, runState);
+
+  const result = runRecoveryListIssues(['--run-state', paths.runState]);
+  assert(result.issues.map((item) => item.taskId).join(',') === 'TASK-001,TASK-002,TASK-003', 'list-issues 应只列异常任务');
+  assert(result.issues.every((item) => ['checks_failed', 'review_failed', 'needs_human'].includes(item.status)), 'list-issues 不应列 ready/done/cancelled');
+}
+
+function testRecoveryListIssuesEmpty(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-list-empty');
+  const result = runRecoveryListIssues(['--run-state', paths.runState]);
+  assert(Array.isArray(result.issues) && result.issues.length === 0, '无异常时 list-issues 应返回空数组');
+}
+
+function testRecoveryShowTaskWithReview(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-show-with-review');
+  runLoop(paths, ['--mock-fail-task', 'TASK-001', '--mock-fail-stage', 'review']);
+  const result = runRecoveryShowTask([
+    '--feature-dir', paths.dir,
+    '--run-state', paths.runState,
+    '--task-id', 'TASK-001',
+  ]);
+  assert(result.state.status === 'review_failed', 'show-task 应输出 task state');
+  assert(result.taskRun.attempts.length === 1, 'show-task 应输出 task-run attempts 摘要');
+  assert(result.review.verdict === 'fail', 'show-task 应输出 review 摘要');
+}
+
+function testRecoveryShowTaskWithoutReview(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-show-without-review');
+  runLoop(paths, ['--mock-fail-check', 'backend-compile']);
+  const result = runRecoveryShowTask([
+    '--feature-dir', paths.dir,
+    '--run-state', paths.runState,
+    '--task-id', 'TASK-001',
+  ]);
+  assert(result.state.status === 'checks_failed', 'show-task 应输出 check 失败状态');
+  assert(result.taskRun.attempts.length === 1, 'show-task 无 review 时也应输出 attempts');
+  assert(result.review === null, 'review 不存在时应返回 null');
+}
+
+function assertRecoveryRetry(baseDir, featureId, status) {
+  const paths = prepareApprovedFeature(baseDir, featureId);
+  setTaskStatus(paths, 'TASK-001', status, issueFixture(`${status} issue`));
+  const result = runRecoveryResolveTask(resolveArgs(paths, 'TASK-001', 'retry'));
+  const runState = readJson(paths.runState);
+  assert(result.fromStatus === status && result.toStatus === 'ready', `${status} retry 应返回 ready`);
+  assert(runState.taskStates['TASK-001'].status === 'ready', `${status} retry 应写回 ready`);
+  assert(runState.taskStates['TASK-001'].lastIssue === null, `${status} retry 应清空 lastIssue`);
+  assert(runState.decisions.at(-1).taskId === 'TASK-001', `${status} retry 应记录 taskId`);
+  assert(runState.decisions.at(-1).action === 'retry', `${status} retry 应记录 action`);
+  assert(runState.decisions.at(-1).fromStatus === status && runState.decisions.at(-1).toStatus === 'ready', `${status} retry 应记录状态迁移`);
+}
+
+function testRecoveryRetryChecksFailed(baseDir) {
+  assertRecoveryRetry(baseDir, 'recovery-retry-checks-failed', 'checks_failed');
+}
+
+function testRecoveryRetryReviewFailed(baseDir) {
+  assertRecoveryRetry(baseDir, 'recovery-retry-review-failed', 'review_failed');
+}
+
+function testRecoveryRetryNeedsHuman(baseDir) {
+  assertRecoveryRetry(baseDir, 'recovery-retry-needs-human', 'needs_human');
+}
+
+function testRecoveryCancelNeedsHuman(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-cancel-needs-human');
+  setTaskStatus(paths, 'TASK-001', 'needs_human', issueFixture('needs human'));
+  const result = runRecoveryResolveTask(resolveArgs(paths, 'TASK-001', 'cancel'));
+  const runState = readJson(paths.runState);
+  assert(result.toStatus === 'cancelled', 'needs_human cancel 应转 cancelled');
+  assert(runState.taskStates['TASK-001'].status === 'cancelled', 'cancel 应写回 cancelled');
+  assert(runState.taskStates['TASK-001'].lastIssue.summary === 'needs human', 'cancel 不应清空 lastIssue');
+  assert(runState.decisions.at(-1).action === 'cancel', 'cancel 应记录人工决策');
+}
+
+function assertResolveFailsUnchanged(paths, args, expectedMessage) {
+  const before = fs.readFileSync(paths.runState, 'utf8');
+  const result = runNode(['tools/recovery/resolve-task.mjs', ...args], { expectFailure: true });
+  const after = fs.readFileSync(paths.runState, 'utf8');
+  assert(result.stderr.includes(expectedMessage), `失败输出应包含：${expectedMessage}`);
+  assert(after === before, 'resolve-task 失败时不应修改 run-state');
+}
+
+function testRecoveryRejectsRetryForStableStatuses(baseDir) {
+  for (const status of ['ready', 'running', 'done', 'cancelled']) {
+    const paths = prepareApprovedFeature(baseDir, `recovery-reject-${status}`);
+    setTaskStatus(paths, 'TASK-001', status, status === 'ready' ? null : issueFixture(`${status} issue`));
+    assertResolveFailsUnchanged(paths, resolveArgs(paths, 'TASK-001', 'retry'), `状态 ${status} 不允许 retry`);
+  }
+}
+
+function testRecoveryRejectsCancelForNonNeedsHuman(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-reject-cancel-review-failed');
+  setTaskStatus(paths, 'TASK-001', 'review_failed', issueFixture('review failed'));
+  assertResolveFailsUnchanged(paths, resolveArgs(paths, 'TASK-001', 'cancel'), 'cancel 仅允许 needs_human');
+}
+
+function testRecoveryRejectsMissingByReason(baseDir) {
+  const missingBy = prepareApprovedFeature(baseDir, 'recovery-reject-missing-by');
+  setTaskStatus(missingBy, 'TASK-001', 'needs_human', issueFixture('needs human'));
+  assertResolveFailsUnchanged(missingBy, [
+    '--run-state', missingBy.runState,
+    '--task-id', 'TASK-001',
+    '--action', 'retry',
+    '--reason', 'missing by',
+  ], '缺少必填参数 --by');
+
+  const missingReason = prepareApprovedFeature(baseDir, 'recovery-reject-missing-reason');
+  setTaskStatus(missingReason, 'TASK-001', 'needs_human', issueFixture('needs human'));
+  assertResolveFailsUnchanged(missingReason, [
+    '--run-state', missingReason.runState,
+    '--task-id', 'TASK-001',
+    '--action', 'retry',
+    '--by', 'e2e',
+  ], '缺少必填参数 --reason');
+}
+
+function testRecoveryRejectsMissingTaskAndInvalidAction(baseDir) {
+  const missingTask = prepareApprovedFeature(baseDir, 'recovery-reject-missing-task');
+  assertResolveFailsUnchanged(missingTask, resolveArgs(missingTask, 'TASK-999', 'retry'), 'task 不存在');
+
+  const invalidAction = prepareApprovedFeature(baseDir, 'recovery-reject-invalid-action');
+  setTaskStatus(invalidAction, 'TASK-001', 'needs_human', issueFixture('needs human'));
+  assertResolveFailsUnchanged(invalidAction, [
+    '--run-state', invalidAction.runState,
+    '--task-id', 'TASK-001',
+    '--action', 'missing',
+    '--by', 'e2e',
+    '--reason', 'invalid action',
+  ], '非法 action');
+}
+
+function testRecoveryRetryLetsRunLoopContinue(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-run-loop-continues');
+  runLoop(paths, ['--mock-fail-check', 'backend-compile', '--max-tasks', '1']);
+  runRecoveryResolveTask(resolveArgs(paths, 'TASK-001', 'retry'));
+  const result = runLoop(paths, ['--max-tasks', '1']);
+  const runState = readJson(paths.runState);
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'retry 后 Run Loop 应继续执行恢复任务');
+  assert(runState.taskStates['TASK-001'].status === 'done', '恢复任务执行后应 done');
+}
+
+function testRecoveryCancelPreventsRunLoopExecution(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-cancel-prevents-run');
+  runLoop(paths, ['--mock-fail-task', 'TASK-001', '--mock-fail-stage', 'human', '--max-tasks', '1']);
+  const beforeAttempts = readJson(paths.runState).taskStates['TASK-001'].attempts;
+  runRecoveryResolveTask(resolveArgs(paths, 'TASK-001', 'cancel'));
+  runLoop(paths, ['--max-tasks', '1']);
+  const runState = readJson(paths.runState);
+  assert(runState.taskStates['TASK-001'].status === 'cancelled', 'cancel 后 Run Loop 不应执行该任务');
+  assert(runState.taskStates['TASK-001'].attempts === beforeAttempts, 'cancel 后 attempts 不应增加');
+}
+
 const tests = [
   ['JSON 契约文件可解析', (_baseDir) => validateJsonFixtures()],
   ['PRD 人工确认门禁', testApprovalGate],
@@ -906,6 +1113,20 @@ const tests = [
   ['Shell Adapter 缺少命令', testShellAdapterMissingCommand],
   ['评审失败复跑入口', testReviewFailureRetry],
   ['needs_human 非阻塞状态', testNeedsHuman],
+  ['Recovery list-issues 正常', testRecoveryListIssues],
+  ['Recovery list-issues 空列表', testRecoveryListIssuesEmpty],
+  ['Recovery show-task 有 review', testRecoveryShowTaskWithReview],
+  ['Recovery show-task 无 review', testRecoveryShowTaskWithoutReview],
+  ['Recovery checks_failed retry', testRecoveryRetryChecksFailed],
+  ['Recovery review_failed retry', testRecoveryRetryReviewFailed],
+  ['Recovery needs_human retry', testRecoveryRetryNeedsHuman],
+  ['Recovery needs_human cancel', testRecoveryCancelNeedsHuman],
+  ['Recovery 稳定状态拒绝 retry', testRecoveryRejectsRetryForStableStatuses],
+  ['Recovery 非 needs_human 拒绝 cancel', testRecoveryRejectsCancelForNonNeedsHuman],
+  ['Recovery 缺 by/reason 拒绝且不改文件', testRecoveryRejectsMissingByReason],
+  ['Recovery task 不存在和非法 action 拒绝', testRecoveryRejectsMissingTaskAndInvalidAction],
+  ['Recovery retry 后 Run Loop 继续执行', testRecoveryRetryLetsRunLoopContinue],
+  ['Recovery cancel 后 Run Loop 不执行', testRecoveryCancelPreventsRunLoopExecution],
 ];
 
 function main() {
