@@ -439,7 +439,7 @@ function runLoop(args) {
         validateAdapterOutcome(outcome, adapter.id);
         const checkResult = runChecks(task, {
           mode: checksMode,
-          cwd: repoRoot,
+          cwd: taskContext.base.workspaceAbs,
           mockFailCheckId: args['mock-fail-check'] ?? '',
         });
         const checkedOutcome = normalizeOutcomeWithChecks({ outcome, checkResult });

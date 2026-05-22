@@ -364,6 +364,36 @@ function testShellAdapterSuccess(baseDir) {
   assert(taskRun.attempts[0].summary.includes('shell-ok'), 'task-run 应记录 shell 输出摘要');
 }
 
+function testRealChecksUseBaseWorkspace(baseDir) {
+  const workspace = path.join(baseDir, 'real-check-workspace');
+  fs.mkdirSync(workspace, { recursive: true });
+  fs.writeFileSync(path.join(workspace, 'base-marker.txt'), 'ok\n', 'utf8');
+  const localProjectPath = writeProjectWithWorkspace(baseDir, 'real-check-workspace-project.json', workspace);
+  const paths = prepareApprovedFeature(baseDir, 'real-check-workspace', { projectPath: localProjectPath, bases: 'backend' });
+  const taskPlan = readJson(paths.taskPlan);
+  const firstTask = taskPlan.storyGroups[0].tasks[0];
+  firstTask.checks = [
+    {
+      id: 'base-workspace-marker',
+      name: '基座工作目录检查',
+      type: 'command',
+      command: 'test -f base-marker.txt',
+      required: true,
+      baseId: firstTask.targetBaseId,
+    },
+  ];
+  fs.writeFileSync(paths.taskPlan, `${JSON.stringify(taskPlan, null, 2)}\n`, 'utf8');
+  const result = runLoop(paths, [
+    '--agent-adapter', 'shell',
+    '--checks-mode', 'real',
+    '--shell-command', `${process.execPath} -e "console.log('workspace-ok')"`,
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.done.includes(firstTask.id), '真实 checks 应在 base workspace 中执行并通过');
+  const taskRun = readJson(path.join(paths.dir, 'runs', firstTask.id, 'task-run.json'));
+  assert(taskRun.attempts[0].checks.some((check) => check.id === 'base-workspace-marker' && check.status === 'passed'), 'task-run 应记录 base workspace check passed');
+}
+
 function testShellAdapterMissingCommand(baseDir) {
   const localProjectPath = writeProjectWithWorkspace(baseDir, 'local-workspace-project-missing-command.json', '.');
   const paths = prepareApprovedFeature(baseDir, 'shell-adapter-missing-command', { projectPath: localProjectPath });
@@ -405,6 +435,7 @@ const tests = [
   ['Checks Runner 真实命令', testChecksRunnerRealCommand],
   ['Checks Runner 真实 HTTP', testChecksRunnerRealHttp],
   ['Shell Adapter 成功执行', testShellAdapterSuccess],
+  ['Run Loop 真实检查使用基座目录', testRealChecksUseBaseWorkspace],
   ['Shell Adapter 缺少命令', testShellAdapterMissingCommand],
   ['评审失败复跑入口', testReviewFailureRetry],
   ['needs_human 非阻塞状态', testNeedsHuman],
