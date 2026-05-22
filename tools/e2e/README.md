@@ -24,6 +24,59 @@ node tools/e2e/run-engine-e2e.mjs
 node tools/e2e/run-engine-e2e.mjs --keep-tmp
 ```
 
+## 真实需求 E2E
+
+`run-real-demand-e2e.mjs` 会复制真实客户端基座 `.engine/source-templates/uniapp-template` 到 `/private/tmp`，初始化临时 git baseline，然后通过 Project Init、PRD、task-plan、Run Loop、真实文件修改、真实 `npm test`、Review Runner 和产物断言验证一条可重复的需求执行链路。
+
+默认场景：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs
+```
+
+等价于：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs \
+  --scenario client-announcement-tags \
+  --adapter shell
+```
+
+默认使用 shell adapter 修改 `/private/tmp` 中的基座副本，不会修改 `.engine/source-templates` 源模板。该场景断言：
+
+- `project.json`、`prd.json`、`task-plan.json`、`run-state.json` 可初始化并确认。
+- Run Loop 执行真实 shell 修改。
+- `npm test` 作为真实 checks 通过。
+- `changedFiles` 只来自 git diff collector。
+- `changedFiles` 仅包含 `pages-workspace/home/index.vue` 和 `tests/foundation.test.js`。
+- Review Runner allowedPaths 审查通过。
+- `run-state` 中 `TASK-001` 为 `done`，`loop-summary` 为 `complete`。
+
+负向 review 场景：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs --scenario client-review-violation
+```
+
+该场景会额外修改 allowedPaths 外的 `config/app-config.js`，预期 Review Runner 返回 `fail`，Run Loop 将任务标记为 `review_failed`。
+
+保留临时目录便于排查：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs --keep-tmp
+```
+
+真实 Codex CLI 不会被默认调用。如需人工 smoke，可显式传入：
+
+```bash
+node tools/e2e/run-real-demand-e2e.mjs \
+  --adapter codex \
+  --codex-command codex \
+  --keep-tmp
+```
+
+Codex 模式依赖本机 Codex CLI 和模型实际执行结果，本轮默认稳定验收仍以 shell adapter 为准。
+
 ## 定位
 
 这是一层轻量的引擎级冒烟和回归测试。它不替代后端、中台、客户端各自的实现测试；各端任务执行时仍应由对应 skill 内置接口连通性、权限、菜单、页面、类型检查等验证。
