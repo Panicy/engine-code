@@ -10,6 +10,10 @@ Task Planner 用于从已确认的 `prd.json` 生成 `task-plan.json` 草稿。�
 - 根据 base 的 `templateId` 选择默认 skill。
 - 中台和客户端任务默认依赖同 story 下的后端任务。
 - 如果 PRD 存在 `dataEntities[]`，会先生成后端 schema/database task。
+- PRD 的 businessRules/dataEntities/permissions 会进入 task scope。
+- PRD 的 assumptions/openQuestions/risks 会进入 task humanNotes。
+- `userStories[].dependencies` 会映射为跨 story task 依赖，并影响 run-state 的 pending/ready。
+- `userStories[].dependencies` 必须引用排在当前故事之前的有效 storyId，避免依赖被静默忽略。
 - 所有 base 会按 backend -> middle -> client 稳定排序，不受 `--bases` 输入顺序影响。
 - 从模板 defaultChecks 生成 task checks。
 - 同步生成初始 `run-state.json`。
@@ -58,7 +62,10 @@ backend task dependsOn schema task
 
 ```text
 middle/client task dependsOn 同 story 下的 backend task
+后置 story 的入口 task dependsOn 前置 story 的终止 task
 ```
+
+例如 `US-002.dependencies=["US-001"]` 时，`US-002` 的首个可执行 task 会依赖 `US-001` 的最后一个 task，因此初始 `run-state` 中该 task 会是 `pending`。如果依赖了不存在或排在后面的故事，Task Planner 会直接失败，要求先修正 PRD。
 
 ## 人工确认
 

@@ -159,24 +159,28 @@ function taskTitle(story, taskType) {
 function taskScope(story, taskType, prd) {
   const commonOutOfScope = ['不修改 PRD 未确认的需求边界', '不处理当前用户故事之外的额外功能'];
   const rules = summarizeItems('业务规则', prd.businessRules, (item) => `${item.id} ${item.text}`);
+  const entities = summarizeItems('数据对象', prd.dataEntities, (entity) => {
+    const fields = (entity.fields ?? []).map((field) => `${field.name}:${field.type}${field.required ? ':required' : ''}`).join(', ');
+    return `${entity.id} ${entity.name} - ${entity.description}${fields ? ` (${fields})` : ''}`;
+  });
   const permissions = summarizeItems('权限要求', prd.permissions, (item) => `${item.code} ${item.name}`);
   if (taskType === 'backend') {
     return {
       summary: `围绕用户故事“${story.title}”完成后端接口、权限、数据和必要 SQL。`,
-      inScope: ['后端接口', '业务校验', '权限标识', '必要数据库变更', '接口连通性自查', ...rules, ...permissions],
+      inScope: ['后端接口', '业务校验', '权限标识', '必要数据库变更', '接口连通性自查', ...entities, ...rules, ...permissions],
       outOfScope: ['中台页面', '客户端页面', ...commonOutOfScope],
     };
   }
   if (taskType === 'middle') {
     return {
       summary: `围绕用户故事“${story.title}”完成中台 API 封装和管理页面。`,
-      inScope: ['API 封装', '列表或表单页面', '按钮权限', '类型检查', ...permissions],
+      inScope: ['API 封装', '列表或表单页面', '按钮权限', '类型检查', ...entities, ...rules, ...permissions],
       outOfScope: ['后端接口实现', '客户端页面', ...commonOutOfScope],
     };
   }
   return {
     summary: `围绕用户故事“${story.title}”完成客户端页面流程。`,
-    inScope: ['客户端 API 调用', '页面流程', '状态处理', '错误态和鉴权边界'],
+    inScope: ['客户端 API 调用', '页面流程', '状态处理', '错误态和鉴权边界', ...entities, ...rules],
     outOfScope: ['后端接口实现', '中台页面', ...commonOutOfScope],
   };
 }
@@ -184,7 +188,8 @@ function taskScope(story, taskType, prd) {
 function buildHumanNotes(prd) {
   const assumptions = summarizeItems('默认假设', prd.assumptions, (item) => `${item.id} ${item.text}`);
   const openQuestions = summarizeItems('待确认问题', prd.openQuestions, (item) => `${item.id} ${item.question}`);
-  return [...assumptions, ...openQuestions].join('\n');
+  const risks = summarizeItems('风险', prd.risks, (item) => `${item.id} ${item.description}；缓解：${item.mitigation}`);
+  return [...assumptions, ...openQuestions, ...risks].join('\n');
 }
 
 function buildTask({ id, story, base, templateInfo, dependencyIds, prd }) {
@@ -215,7 +220,7 @@ function buildTask({ id, story, base, templateInfo, dependencyIds, prd }) {
   };
 }
 
-function buildSchemaTask({ id, story, base, templateInfo, prd }) {
+function buildSchemaTask({ id, story, base, templateInfo, prd, dependencyIds = [] }) {
   const skillId = findSkill(templateInfo.registry, base.templateId, 'schema', 'ruoyi-database-migration');
   const entities = summarizeItems('数据对象', prd.dataEntities, (entity) => {
     const fields = (entity.fields ?? []).map((field) => `${field.name}:${field.type}${field.required ? ':required' : ''}`).join(', ');
@@ -229,7 +234,7 @@ function buildSchemaTask({ id, story, base, templateInfo, prd }) {
     type: 'schema',
     sourceStoryIds: [story.id],
     targetBaseId: base.baseId,
-    dependsOn: [],
+    dependsOn: dependencyIds,
     requiredSkillId: skillId,
     scope: {
       summary: `围绕用户故事“${story.title}”完成数据库、字段、索引、菜单权限 SQL 等基础准备。`,
@@ -268,10 +273,15 @@ function buildTaskPlan(args) {
   const templateCache = new Map();
   const timestamp = nowIso();
   let taskCounter = 1;
+  const storyTerminalTaskIds = new Map();
+  validateStoryDependencies(prd.userStories ?? []);
 
   const storyGroups = (prd.userStories ?? []).map((story) => {
     const tasks = [];
     let backendTaskId = null;
+    const storyDependencyIds = (story.dependencies ?? [])
+      .map((storyId) => storyTerminalTaskIds.get(storyId))
+      .filter(Boolean);
 
     for (const base of bases) {
       if (!templateCache.has(base.templateId)) {
@@ -283,19 +293,22 @@ function buildTaskPlan(args) {
       if (taskType === 'backend' && (prd.dataEntities ?? []).length > 0) {
         schemaTaskId = `TASK-${String(taskCounter).padStart(3, '0')}`;
         taskCounter += 1;
-        tasks.push(buildSchemaTask({ id: schemaTaskId, story, base, templateInfo, prd }));
+        tasks.push(buildSchemaTask({ id: schemaTaskId, story, base, templateInfo, prd, dependencyIds: storyDependencyIds }));
       }
 
       const taskId = `TASK-${String(taskCounter).padStart(3, '0')}`;
       taskCounter += 1;
       const dependencyIds = [];
       if (schemaTaskId) dependencyIds.push(schemaTaskId);
+      if (!schemaTaskId && taskType === 'backend') dependencyIds.push(...storyDependencyIds);
       if ((taskType === 'middle' || taskType === 'client') && backendTaskId) dependencyIds.push(backendTaskId);
+      if ((taskType === 'middle' || taskType === 'client') && !backendTaskId) dependencyIds.push(...storyDependencyIds);
 
       const task = buildTask({ id: taskId, story, base, templateInfo, dependencyIds, prd });
       if (taskType === 'backend') backendTaskId = taskId;
       tasks.push(task);
     }
+    if (tasks.length > 0) storyTerminalTaskIds.set(story.id, tasks.at(-1).id);
 
     return {
       storyId: story.id,
@@ -358,6 +371,23 @@ function buildRunState(taskPlan, timestamp) {
     artifacts: [],
     decisions: [],
   };
+}
+
+function validateStoryDependencies(stories) {
+  const knownStoryIds = new Set(stories.map((story) => story.id));
+  const previousStoryIds = new Set();
+  for (const story of stories) {
+    const dependencies = story.dependencies ?? [];
+    const unknown = dependencies.filter((storyId) => !knownStoryIds.has(storyId));
+    if (unknown.length > 0) {
+      throw new Error(`用户故事 ${story.id} 依赖不存在的 storyId：${unknown.join(', ')}`);
+    }
+    const forward = dependencies.filter((storyId) => !previousStoryIds.has(storyId));
+    if (forward.length > 0) {
+      throw new Error(`用户故事 ${story.id} 只能依赖排在它之前的用户故事：${forward.join(', ')}`);
+    }
+    previousStoryIds.add(story.id);
+  }
 }
 
 function writeJson(filePath, value, force) {

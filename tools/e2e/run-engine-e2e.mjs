@@ -279,6 +279,260 @@ function testApprovalGate(baseDir) {
   assert(result.stderr.includes('PRD 尚未人工确认'), '未确认 PRD 应阻止任务拆分');
 }
 
+function writeRichRequirements(baseDir, overrides = {}) {
+  const requirements = {
+    impactedBaseIds: ['client', 'backend', 'middle'],
+    goals: ['管理员可以维护公告标签。'],
+    nonGoals: ['不实现公告智能推荐。'],
+    userStories: [
+      {
+        title: '管理员维护公告标签',
+        story: '作为管理员，我希望维护公告标签，以便对公告进行分类。',
+        acceptanceCriteria: [
+          {
+            text: '管理员可以新增公告标签。',
+            verification: '后端接口和中台页面均可完成新增。',
+          },
+        ],
+        priority: 'must',
+      },
+      {
+        title: '业务端查看公告标签',
+        story: '作为业务用户，我希望查看公告标签，以便快速识别公告类型。',
+        acceptanceCriteria: ['业务端列表展示公告标签。'],
+        priority: 'should',
+        dependencies: ['US-001'],
+      },
+    ],
+    businessRules: ['公告标签名称在同一租户下不可重复。'],
+    dataEntities: [
+      {
+        name: '公告标签',
+        description: '用于标记公告类型。',
+        fields: [
+          { name: 'tagName', type: 'string', required: true, description: '标签名称' },
+          { name: 'tagColor', type: 'string', required: false, description: '标签颜色' },
+        ],
+      },
+    ],
+    permissions: [
+      {
+        code: 'system:noticeTag:list',
+        name: '公告标签查询',
+        targetBaseId: 'backend',
+      },
+    ],
+    assumptions: ['一期只支持后台维护公告标签。'],
+    openQuestions: [
+      {
+        question: '公告标签是否需要导出？',
+        status: 'open',
+      },
+    ],
+    risks: [
+      {
+        description: '历史公告数据可能缺少标签。',
+        mitigation: '上线前通过默认标签兜底。',
+      },
+    ],
+    constraints: {
+      security: ['公告标签接口必须保留权限码。'],
+      ux: ['中台页面沿用现有表格表单模式。'],
+      performance: ['列表查询需要支持分页。'],
+      quality: ['必须验证 401/403/404。'],
+    },
+    ...overrides,
+  };
+  const filePath = path.join(baseDir, `requirements-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
+  writeJsonFile(filePath, requirements);
+  return filePath;
+}
+
+function createPrdFromRequirements(baseDir, featureId, requirementsPath) {
+  const prdPath = path.join(baseDir, `${featureId}-prd.json`);
+  const result = parseCommandJson(runNode([
+    'tools/prd-builder/create-prd.mjs',
+    '--feature-id', featureId,
+    '--name', '公告标签',
+    '--summary', '支持管理员维护公告标签并在业务端展示。',
+    '--project', projectPath,
+    '--requirements-file', requirementsPath,
+    '--out', prdPath,
+    '--force',
+  ]));
+  assert(result.ok === true, 'requirements-file 生成 PRD 应成功');
+  return prdPath;
+}
+
+function assertInvalidRequirements(baseDir, featureId, requirements, expectedMessage) {
+  const requirementsPath = writeRichRequirements(baseDir, requirements);
+  const result = runNode([
+    'tools/prd-builder/create-prd.mjs',
+    '--feature-id', featureId,
+    '--name', 'Invalid Requirements',
+    '--summary', '验证 requirements 必填字段校验',
+    '--project', projectPath,
+    '--requirements-file', requirementsPath,
+    '--out', path.join(baseDir, `${featureId}.json`),
+    '--force',
+  ], { expectFailure: true });
+  assert(result.stderr.includes(expectedMessage), `requirements 缺失必填字段时错误应包含：${expectedMessage}`);
+}
+
+function testPrdBuilderRequirementsFile(baseDir) {
+  const requirementsPath = writeRichRequirements(baseDir);
+  const prdPath = createPrdFromRequirements(baseDir, 'requirements-rich-prd', requirementsPath);
+  const prd = readJson(prdPath);
+  assert(prd.status === 'draft' && prd.humanApproval.approved === false, 'requirements-file 生成 PRD 仍应是 draft');
+  assert(prd.impactedBaseIds.join(',') === 'client,backend,middle', 'requirements-file 应填充 impactedBaseIds');
+  assert(prd.userStories.map((story) => story.id).join(',') === 'US-001,US-002', 'userStories 应自动补齐稳定 ID');
+  assert(prd.userStories[0].acceptanceCriteria[0].id === 'AC-001', 'acceptanceCriteria 应自动补齐稳定 ID');
+  assert(prd.businessRules[0].id === 'BR-001', 'businessRules 应自动补齐稳定 ID');
+  assert(prd.dataEntities[0].id === 'DE-001', 'dataEntities 应自动补齐稳定 ID');
+  assert(prd.permissions[0].id === 'PERM-001' && prd.permissions[0].targetBaseId === 'backend', 'permissions 应补齐 ID 并保留 targetBaseId');
+  assert(prd.assumptions[0].id === 'ASM-001', 'assumptions 应自动补齐稳定 ID');
+  assert(prd.openQuestions[0].id === 'Q-001', 'openQuestions 应自动补齐稳定 ID');
+  assert(prd.risks[0].id === 'RISK-001', 'risks 应自动补齐稳定 ID');
+  assert(prd.constraints.security.some((item) => item.includes('权限码')), 'requirements constraints.security 应写入 PRD');
+  assert(prd.constraints.ux.some((item) => item.includes('表格表单')), 'requirements constraints.ux 应写入 PRD');
+  assert(prd.constraints.performance.some((item) => item.includes('分页')), 'requirements constraints.performance 应写入 PRD');
+  assert(prd.constraints.quality.some((item) => item.includes('401/403/404')), 'requirements constraints.quality 应写入 PRD');
+
+  const refused = runNode(['tools/prd-builder/approve-prd.mjs', '--prd', prdPath, '--by', 'e2e'], { expectFailure: true });
+  assert(refused.stderr.includes('PRD 存在未关闭 openQuestions'), 'openQuestions 未关闭时默认拒绝确认');
+  parseCommandJson(runNode(['tools/prd-builder/approve-prd.mjs', '--prd', prdPath, '--by', 'e2e', '--allow-open-questions']));
+  assert(readJson(prdPath).status === 'approved', '--allow-open-questions 应允许确认 PRD');
+
+  const invalidRequirements = writeRichRequirements(baseDir, {
+    permissions: [
+      {
+        code: 'system:noticeTag:list',
+        name: '公告标签查询',
+        targetBaseId: 'missing',
+      },
+    ],
+  });
+  const invalid = runNode([
+    'tools/prd-builder/create-prd.mjs',
+    '--feature-id', 'requirements-invalid-permission',
+    '--name', 'Invalid Permission',
+    '--summary', '验证权限目标基座校验',
+    '--project', projectPath,
+    '--requirements-file', invalidRequirements,
+    '--out', path.join(baseDir, 'invalid-permission-prd.json'),
+    '--force',
+  ], { expectFailure: true });
+  assert(invalid.stderr.includes('targetBaseId=missing'), 'permission.targetBaseId 不存在时应失败');
+
+  assertInvalidRequirements(baseDir, 'requirements-missing-story', {
+    userStories: [
+      {
+        title: '缺少正文',
+        acceptanceCriteria: ['应失败。'],
+        priority: 'must',
+      },
+    ],
+  }, 'userStories[1].story 必须是非空字符串');
+  assertInvalidRequirements(baseDir, 'requirements-missing-field-type', {
+    dataEntities: [
+      {
+        name: '公告标签',
+        description: '用于标记公告类型。',
+        fields: [{ name: 'tagName', required: true, description: '标签名称' }],
+      },
+    ],
+  }, 'dataEntities[1].fields[1].type 必须是非空字符串');
+  assertInvalidRequirements(baseDir, 'requirements-missing-permission-code', {
+    permissions: [
+      {
+        name: '公告标签查询',
+        targetBaseId: 'backend',
+      },
+    ],
+  }, 'permissions[1].code 必须是非空字符串');
+}
+
+function testTaskPlannerRichPrdDependencies(baseDir) {
+  const requirementsPath = writeRichRequirements(baseDir, {
+    openQuestions: [
+      {
+        question: '公告标签是否需要导出？',
+        status: 'answered',
+        answer: '一期不需要导出。',
+      },
+    ],
+  });
+  const prdPath = createPrdFromRequirements(baseDir, 'requirements-task-plan', requirementsPath);
+  parseCommandJson(runNode(['tools/prd-builder/approve-prd.mjs', '--prd', prdPath, '--by', 'e2e']));
+  const taskPlanPath = path.join(baseDir, 'requirements-task-plan.json');
+  const runStatePath = path.join(baseDir, 'requirements-run-state.json');
+  parseCommandJson(runNode([
+    'tools/task-planner/create-task-plan.mjs',
+    '--project', projectPath,
+    '--prd', prdPath,
+    '--out', taskPlanPath,
+    '--run-state-out', runStatePath,
+    '--force',
+  ]));
+  parseCommandJson(runNode([
+    'tools/task-planner/approve-task-plan.mjs',
+    '--project', projectPath,
+    '--prd', prdPath,
+    '--task-plan', taskPlanPath,
+    '--run-state', runStatePath,
+    '--by', 'e2e',
+  ]));
+  const taskPlan = readJson(taskPlanPath);
+  const runState = readJson(runStatePath);
+  const validation = validateFiles({
+    project: projectPath,
+    prd: prdPath,
+    'task-plan': taskPlanPath,
+    'run-state': runStatePath,
+    'templates-dir': templatesDir,
+  });
+  assert(validation.valid, `rich PRD 生成的 task-plan/run-state 应通过 Validator：${JSON.stringify(validation, null, 2)}`);
+  const firstStoryTasks = taskPlan.storyGroups[0].tasks;
+  const secondStoryTasks = taskPlan.storyGroups[1].tasks;
+  assert(firstStoryTasks.map((task) => task.type).join(',') === 'schema,backend,middle,client', 'dataEntities 应触发后端 schema task 且保持 backend->middle->client 排序');
+  assert(firstStoryTasks[0].requiredSkillId === 'ruoyi-database-migration', 'schema task 应使用 database migration skill');
+  assert(firstStoryTasks[1].dependsOn.join(',') === firstStoryTasks[0].id, 'backend task 应依赖 schema task');
+  assert(secondStoryTasks[0].dependsOn.includes(firstStoryTasks.at(-1).id), 'story.dependencies 应让后续故事入口任务依赖前置故事终止任务');
+  assert(secondStoryTasks[1].dependsOn.includes(secondStoryTasks[0].id), '后续故事 backend task 应继续依赖本故事 schema task');
+  assert(runState.taskStates[firstStoryTasks[0].id].status === 'ready', '无前置依赖的首个 schema task 应 ready');
+  assert(runState.taskStates[secondStoryTasks[0].id].status === 'pending', '跨 story 依赖的 schema task 应 pending');
+  assert(firstStoryTasks[0].scope.inScope.some((item) => item.includes('公告标签名称')), 'businessRules 应进入 task scope');
+  assert(firstStoryTasks[0].scope.inScope.some((item) => item.includes('公告标签') && item.includes('tagName')), 'dataEntities 应进入 task scope');
+  assert(firstStoryTasks[0].scope.inScope.some((item) => item.includes('system:noticeTag:list')), 'permissions 应进入 task scope');
+  assert(firstStoryTasks[0].humanNotes.includes('一期只支持后台维护公告标签'), 'assumptions 应进入 humanNotes');
+  assert(firstStoryTasks[0].humanNotes.includes('公告标签是否需要导出'), 'openQuestions 应进入 humanNotes');
+  assert(firstStoryTasks[0].humanNotes.includes('历史公告数据可能缺少标签'), 'risks 应进入 humanNotes');
+
+  const invalidDependencyRequirements = writeRichRequirements(baseDir, {
+    userStories: [
+      {
+        title: '依赖错误故事',
+        story: '作为管理员，我希望看到明确的依赖错误。',
+        acceptanceCriteria: ['依赖错误应被拒绝。'],
+        priority: 'must',
+        dependencies: ['US-999'],
+      },
+    ],
+    openQuestions: [],
+  });
+  const invalidPrdPath = createPrdFromRequirements(baseDir, 'requirements-invalid-dependency', invalidDependencyRequirements);
+  parseCommandJson(runNode(['tools/prd-builder/approve-prd.mjs', '--prd', invalidPrdPath, '--by', 'e2e']));
+  const invalid = runNode([
+    'tools/task-planner/create-task-plan.mjs',
+    '--project', projectPath,
+    '--prd', invalidPrdPath,
+    '--out', path.join(baseDir, 'invalid-dependency-task-plan.json'),
+    '--run-state-out', path.join(baseDir, 'invalid-dependency-run-state.json'),
+    '--force',
+  ], { expectFailure: true });
+  assert(invalid.stderr.includes('依赖不存在的 storyId：US-999'), 'story.dependencies 引用不存在故事时应失败');
+}
+
 function testHappyPath(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'happy-path');
   const result = runLoop(paths, ['--agent-adapter', 'mock']);
@@ -1579,6 +1833,8 @@ function testRecoveryCancelPreventsRunLoopExecution(baseDir) {
 const tests = [
   ['JSON 契约文件可解析', (_baseDir) => validateJsonFixtures()],
   ['PRD 人工确认门禁', testApprovalGate],
+  ['PRD Builder requirements-file', testPrdBuilderRequirementsFile],
+  ['Task Planner rich PRD dependencies', testTaskPlannerRichPrdDependencies],
   ['未知 Agent Adapter 拒绝', testUnknownAgentAdapter],
   ['未知 Checks Mode 拒绝', testUnknownChecksMode],
   ['Run Loop 未知参数拒绝', testRunLoopRejectsUnknownArg],
