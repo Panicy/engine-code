@@ -255,6 +255,19 @@ function testUnknownChecksMode(baseDir) {
   assert(result.stderr.includes('--checks-mode 必须是 real、mock 或 command'), '未知 checks-mode 应被拒绝');
 }
 
+function testRunLoopRejectsUnknownArg(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'run-loop-unknown-arg');
+  const result = runNode([
+    'tools/run-loop/run-feature.mjs',
+    '--project', projectPath,
+    '--prd', paths.prd,
+    '--task-plan', paths.taskPlan,
+    '--run-state', paths.runState,
+    '--shell-changed-files', 'src/unsafe.js',
+  ], { expectFailure: true });
+  assert(result.stderr.includes('未知参数：--shell-changed-files'), 'Run Loop 应拒绝已删除的 changedFiles 参数');
+}
+
 function testMaxTasksPause(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'max-tasks-pause');
   const result = runLoop(paths, ['--max-tasks', '1']);
@@ -384,6 +397,7 @@ const tests = [
   ['PRD 人工确认门禁', testApprovalGate],
   ['未知 Agent Adapter 拒绝', testUnknownAgentAdapter],
   ['未知 Checks Mode 拒绝', testUnknownChecksMode],
+  ['Run Loop 未知参数拒绝', testRunLoopRejectsUnknownArg],
   ['完整主流程', testHappyPath],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],

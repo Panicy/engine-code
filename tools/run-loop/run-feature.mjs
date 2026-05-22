@@ -36,6 +36,22 @@ function usage() {
 
 function parseArgs(argv) {
   const args = {};
+  const allowedKeys = new Set([
+    'project',
+    'prd',
+    'task-plan',
+    'run-state',
+    'templates-dir',
+    'agent-adapter',
+    'checks-mode',
+    'max-tasks',
+    'mock-fail-task',
+    'mock-fail-stage',
+    'mock-fail-check',
+    'shell-command',
+    'shell-timeout-ms',
+    'owner',
+  ]);
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') {
@@ -44,6 +60,7 @@ function parseArgs(argv) {
     }
     if (!arg.startsWith('--')) throw new Error(`未知参数：${arg}`);
     const key = arg.slice(2);
+    if (!allowedKeys.has(key)) throw new Error(`未知参数：${arg}`);
     const value = argv[i + 1];
     if (!value || value.startsWith('--')) throw new Error(`参数 ${arg} 缺少值`);
     args[key] = value;
