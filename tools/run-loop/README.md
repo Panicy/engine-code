@@ -43,6 +43,7 @@ node tools/run-loop/run-feature.mjs \
 --mock-fail-stage check
 --mock-fail-check backend-compile
 --shell-command "node -e \"console.log('ok')\""
+--shell-changed-files "ruoyi-modules/demo/Demo.java"
 --shell-timeout-ms 300000
 --owner run-loop
 ```
@@ -67,7 +68,8 @@ node tools/run-loop/run-feature.mjs \
   --task-plan task-plan.json \
   --run-state run-state.json \
   --agent-adapter shell \
-  --shell-command "node -e \"console.log('shell-ok')\""
+  --shell-command "node -e \"console.log('shell-ok')\"" \
+  --shell-changed-files "ruoyi-modules/demo/Demo.java"
 ```
 
 ## Checks Runner
@@ -80,6 +82,15 @@ node tools/run-loop/run-feature.mjs \
 - `manual` 检查不会自动通过；必需 manual 检查会让任务进入 `checks_failed`。
 
 检查失败时，Run Loop 会将任务标记为 `checks_failed`，并把每个 check 的结果写入 `task-run.json`。
+
+## Review Runner
+
+Run Loop 会在 adapter 成功且 checks 通过后运行 Review Runner。当前 review 会校验：
+
+- `changedFiles` 是否在 `task.allowedPaths` 内。
+- 必需 checks 是否都有结果且为 `passed`。
+
+Review 失败时，任务进入 `review_failed`，并写入 `runs/<taskId>/review.json`。
 
 ## Mock 失败
 
@@ -114,5 +125,5 @@ node tools/run-loop/run-feature.mjs \
 
 - 接入真实 `codex` Agent Adapter。
 - 增强 Checks Runner 的鉴权令牌注入和响应体断言。
-- 接入真实 Reviewer。
+- 增强 Review Runner 的语义审查、权限/菜单/SQL/API 契约一致性检查。
 - 增加更细粒度的运行锁恢复策略。

@@ -6,7 +6,7 @@ Checks Runner 负责把 task-plan 中的 `checks` 转成标准化检查结果，
 
 - `real` 模式：默认模式，真实执行 command 检查和 HTTP 检查。
 - `command` 模式：`real` 的兼容别名，真实执行 command 检查和 HTTP 检查。
-- `mock` 模式：只用于开发回归，HTTP 检查按配置生成通过结果，command 检查跳过。
+- `mock` 模式：只用于开发回归，HTTP 和 command 检查按配置生成通过结果。
 - `manual` 检查不会自动通过；必需的 manual 检查会让任务进入 `checks_failed`。
 - 支持 `--mock-fail-check <checkId>` 定点模拟检查失败。
 - HTTP 检查会按 `expectedStatus` 判断结果。

@@ -41,9 +41,11 @@ Adapter 的 `execute(context)` 返回：
 ```bash
 node tools/run-loop/run-feature.mjs \
   --agent-adapter shell \
-  --shell-command "node -e \"console.log('ok')\""
+  --shell-command "node -e \"console.log('ok')\"" \
+  --shell-changed-files "ruoyi-modules/demo/Demo.java"
 ```
 
 - 工作目录使用 `taskContext.base.workspaceAbs`。
 - 命令退出码为 0 时，任务进入后续 checks/review。
+- `--shell-changed-files` 可传逗号分隔的改动文件列表，供 Review Runner 校验 allowedPaths。
 - 命令失败或 workspace 不存在时，任务进入 `needs_human`。

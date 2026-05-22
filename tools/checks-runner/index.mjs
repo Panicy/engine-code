@@ -57,6 +57,9 @@ function runShellCommand(command, options) {
 }
 
 function runCommandCheck(check, options) {
+  if (options.mode === 'mock') {
+    return passedCheck(check, `mock command ${check.command}`);
+  }
   if (!isRealMode(options.mode)) {
     return skippedCheck(check, `${options.mode} mode skipped command check`);
   }

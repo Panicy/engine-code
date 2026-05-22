@@ -6,6 +6,11 @@ function outputSummary(result) {
   return output ? output.slice(0, 1000) : `exit ${result.status ?? 'unknown'}`;
 }
 
+function splitChangedFiles(value) {
+  if (!value) return [];
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
 function createShellAdapter() {
   return {
     id: 'shell',
@@ -68,6 +73,7 @@ function createShellAdapter() {
         maxBuffer: 1024 * 1024,
       });
       const summary = outputSummary(result);
+      const changedFiles = splitChangedFiles(args['shell-changed-files']);
       if (result.status === 0) {
         return {
           requestedStatus: 'done',
@@ -75,7 +81,7 @@ function createShellAdapter() {
           reviewVerdict: 'pass',
           source: 'executor',
           agent: { tool: 'shell', model: 'local' },
-          changedFiles: [],
+          changedFiles,
           checks: [],
           summary,
           errors: [],

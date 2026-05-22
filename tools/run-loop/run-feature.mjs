@@ -6,6 +6,7 @@ import { validateFiles, validateSchema } from '../validator/validate-feature.mjs
 import { availableAgentAdapters, createAgentAdapter } from '../agent-adapters/index.mjs';
 import { runChecks } from '../checks-runner/index.mjs';
 import { buildTaskContext } from '../skill-context/index.mjs';
+import { runReview } from '../review-runner/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +29,7 @@ function usage() {
     '  --mock-fail-stage check|review|human',
     '  --mock-fail-check CHECK-001',
     '  --shell-command <command>',
+    '  --shell-changed-files <file1,file2>',
     '  --shell-timeout-ms 300000',
     '  --owner run-loop',
   ].join('\n');
@@ -219,27 +221,6 @@ function validateAdapterOutcome(outcome, adapterId) {
   }
 }
 
-function buildReview({ runState, task, verdict, reviewedAt }) {
-  return {
-    schemaVersion: '0.1.0',
-    runId: runState.runId,
-    taskId: task.id,
-    verdict,
-    reviewedAt,
-    criteriaResults: (task.acceptanceCriteria ?? [{ id: 'AC-001', text: task.title }]).map((criterion) => ({
-      criterionId: criterion.id,
-      status: verdict === 'pass' ? 'pass' : 'fail',
-      evidence: verdict === 'pass' ? 'mock review passed' : 'mock review failed',
-    })),
-    scopeFindings: [],
-    architectureFindings: [],
-    testFindings: [],
-    requiredFixes: verdict === 'pass' ? [] : [{ id: 'FIX-001', description: 'mock review requires changes' }],
-    suggestedFollowUpTasks: [],
-    summary: verdict === 'pass' ? `mock review passed ${task.id}` : `mock review ${verdict} for ${task.id}`,
-  };
-}
-
 function retryAwareStatus(state, desiredStatus) {
   if ((desiredStatus === 'checks_failed' || desiredStatus === 'review_failed') && state.maxAttempts && state.attempts >= state.maxAttempts) {
     return 'needs_human';
@@ -269,6 +250,20 @@ function normalizeOutcomeWithChecks({ outcome, checkResult }) {
     checks: checkResult.checks,
     summary: `checks failed: ${[...checkResult.failedCheckIds, ...checkResult.manualCheckIds].join(', ')}`,
     nextActions: ['修复检查失败项后下一轮自动重试。'],
+  };
+}
+
+function normalizeOutcomeWithReview({ outcome, review }) {
+  if (outcome.requestedStatus !== 'done') return outcome;
+  if (review.verdict === 'pass') return outcome;
+  return {
+    ...outcome,
+    requestedStatus: review.verdict === 'needs_human' ? 'needs_human' : 'review_failed',
+    taskRunStatus: review.verdict === 'needs_human' ? 'needs_human' : 'review_failed',
+    reviewVerdict: review.verdict,
+    source: 'reviewer',
+    summary: review.summary,
+    nextActions: review.requiredFixes.map((fix) => fix.description),
   };
 }
 
@@ -431,8 +426,12 @@ function runLoop(args) {
           cwd: repoRoot,
           mockFailCheckId: args['mock-fail-check'] ?? '',
         });
-        const normalizedOutcome = normalizeOutcomeWithChecks({ outcome, checkResult });
+        const checkedOutcome = normalizeOutcomeWithChecks({ outcome, checkResult });
         const finishedTaskAt = nowIso();
+        const review = checkedOutcome.requestedStatus === 'done'
+          ? runReview({ runState, taskContext, outcome: checkedOutcome, reviewedAt: finishedTaskAt })
+          : null;
+        const normalizedOutcome = normalizeOutcomeWithReview({ outcome: checkedOutcome, review });
         const desiredStatus = retryAwareStatus(state, normalizedOutcome.requestedStatus);
         const lastIssue = desiredStatus === 'done' ? null : {
           type: desiredStatus === 'needs_human' ? 'needs_human' : `${desiredStatus}_adapter`,
@@ -466,11 +465,11 @@ function runLoop(args) {
           runState.artifacts.push({ type: 'taskRun', path: taskRunPath });
         }
 
-        if (normalizedOutcome.reviewVerdict) {
-          const review = buildReview({ runState, task, verdict: normalizedOutcome.reviewVerdict, reviewedAt: finishedTaskAt });
+        if (review || normalizedOutcome.reviewVerdict) {
+          const reviewArtifact = review ?? runReview({ runState, taskContext, outcome: normalizedOutcome, reviewedAt: finishedTaskAt });
           const reviewPath = artifactPath(featureDir, task.id, 'review.json');
-          schemaValidateArtifact('review', review, reviewPath);
-          writeJsonAtomic(reviewPath, review);
+          schemaValidateArtifact('review', reviewArtifact, reviewPath);
+          writeJsonAtomic(reviewPath, reviewArtifact);
           if (!runState.artifacts.some((artifact) => artifact.type === 'review' && artifact.path === reviewPath)) {
             runState.artifacts.push({ type: 'review', path: reviewPath });
           }
