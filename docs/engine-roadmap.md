@@ -34,11 +34,12 @@
 | Project 初始化模块 | todo | - | 创建 workspace/project/feature 初始结构 |
 | PRD 生成与确认模块 | in_progress | `tools/prd-builder/` | 已支持规则化生成 PRD 草稿、项目校验、多故事输入和人工确认工具 |
 | Task Plan 生成与确认模块 | in_progress | `tools/task-planner/` | 已支持规则化生成 task-plan 草稿和人工确认工具 |
-| Run Loop 执行器 | in_progress | `tools/run-loop/run-feature.mjs` | 已支持 mock 执行循环、运行锁、状态推进和产物写入 |
-| Agent Adapter | todo | - | 根据 task + skill 拼装 agent 输入并调用执行 |
-| Checks Runner | todo | - | 执行 command/http/manual checks，并结构化输出结果 |
-| Reviewer Adapter | todo | - | 检查 allowedPaths、quality gates、acceptance criteria |
-| 运行产物写入器 | todo | - | 原子写入 task-run/review/run-state/loop-summary |
+| Run Loop 执行器 | in_progress | `tools/run-loop/run-feature.mjs` | 已模块化调度 Skill Context、Agent Adapter、Checks Runner、Review Runner，并写入运行产物 |
+| Skill Context | done | `tools/skill-context/` | 已能为单个 task 装配 project/base/template/PRD/task/skill 上下文 |
+| Agent Adapter | in_progress | `tools/agent-adapters/` | 已支持 `mock` 和 `shell`，待接入真实 Codex adapter |
+| Checks Runner | in_progress | `tools/checks-runner/` | 默认真实执行 command/http checks，支持 mock 回归模式 |
+| Review Runner | in_progress | `tools/review-runner/` | 已支持 allowedPaths 和必需 checks 的确定性审查，待增强语义审查 |
+| 运行产物写入器 | in_progress | `tools/run-loop/run-feature.mjs` | 已原子写入 task-context/task-run/review/run-state/loop-summary，待抽成独立模块 |
 | 数据库变更执行辅助 | todo | - | 从 database-changes 到 SQL 检查、菜单权限 SQL 检查 |
 | 跨端契约生成与消费 | todo | - | backend-api、permission-manifest 的生成、校验和消费 |
 | 简版 CLI | later | - | 当前阶段暂不考虑 CLI，后续围绕 validator/run-loop 暴露命令 |
@@ -106,14 +107,17 @@
 - [x] 选择 `ready`、`checks_failed`、`review_failed` 任务。
 - [x] 按 task-plan 顺序串行执行。
 - [x] 接入 mock Agent Adapter。
+- [x] 接入 shell Agent Adapter。
+- [x] 解析 base、template、skill 到完整 task execution context。
 - [x] 执行后写入 task-run。
-- [x] mock checks/review 并更新 run-state。
+- [x] 接入 Checks Runner 并更新 run-state。
+- [x] 接入 Review Runner 并更新 run-state。
 - [x] 达到 maxAttempts 后转 needs_human。
 - [x] 写入 loop-summary。
 - [x] 每轮前后调用 Validator。
 - [ ] 实现 stale running 恢复策略。
-- [ ] 解析 base、template、skill 到完整 task execution context。
-- [ ] 接入真实 Agent Adapter。
+- [ ] 接入真实 Codex Agent Adapter。
+- [ ] 自动采集 git diff changedFiles。
 
 完成标准：
 
@@ -124,21 +128,23 @@
 
 ### M3：Checks Runner MVP
 
-状态：`todo`
+状态：`in_progress`
 
 目标：让任务执行后有可靠检查结果。
 
 任务：
 
-- [ ] 实现 command check。
-- [ ] 实现 http check。
-- [ ] 实现 manual check 输出。
-- [ ] 结构化记录 check stdout/stderr/status。
-- [ ] 支持 expectedStatus。
-- [ ] 支持 anonymous/authenticated/auth_disabled。
+- [x] 实现 command check。
+- [x] 实现 http check。
+- [x] 实现 manual check 输出。
+- [x] 结构化记录 check command/status/summary。
+- [x] 支持 expectedStatus。
+- [x] 支持 setupCommands/teardownCommands。
+- [ ] 支持 anonymous/authenticated/auth_disabled 的令牌和环境策略。
 - [ ] auth_disabled 强制 dev/test 环境。
-- [ ] auth_disabled 强制 teardown。
+- [x] auth_disabled schema 层强制 teardown。
 - [ ] teardown 失败时标记 needs_human。
+- [ ] 支持响应 body 断言。
 
 完成标准：
 
@@ -148,19 +154,21 @@
 
 ### M4：Reviewer MVP
 
-状态：`todo`
+状态：`in_progress`
 
 目标：让 checks 通过后的任务进入质量审查。
 
 任务：
 
-- [ ] 检查 changedFiles 是否匹配 allowedPaths。
+- [x] 检查 changedFiles 是否匹配 allowedPaths。
 - [ ] 检查 expectedChangedFiles 是否合理。
-- [ ] 检查 task acceptanceCriteria。
+- [x] 生成 task acceptanceCriteria 级 review 结果。
 - [ ] 检查 skill qualityGates。
-- [ ] 识别越界改动。
+- [x] 识别越界改动。
 - [ ] 识别高风险改动并返回 needs_human。
-- [ ] 写入 review.json。
+- [x] 写入 review.json。
+- [ ] 自动读取 git diff，避免依赖 adapter 自报 changedFiles。
+- [ ] 增加后端/中台/客户端专项 review 规则。
 
 完成标准：
 
@@ -251,11 +259,66 @@
 
 近期建议按以下顺序推进：
 
-1. M7 Task Planner MVP。
-3. M2 Run Loop MVP。
-4. M3 Checks Runner MVP。
-5. M4 Reviewer MVP。
-6. M5 Project 与 Feature 初始化。
+1. 自动采集 git diff changedFiles，补齐 Review Runner 可信输入。
+2. M5 Project 与 Feature 初始化，降低多项目接入成本。
+3. Codex Agent Adapter，把 task-context 交给真实开发执行器。
+4. Checks Runner 鉴权增强，覆盖 token、401/403、404、auth_disabled 安全策略。
+5. Review Runner 语义增强，覆盖 skill qualityGates、权限/菜单/SQL/API 契约一致性。
+6. 异常恢复工具，支持查看 attempts、恢复 needs_human、重跑异常任务。
+
+## 当前整体架构
+
+当前引擎已经从早期的 Run Loop 内部 mock，演进为模块化编排架构：
+
+```text
+JSON Contracts
+  -> PRD Builder
+  -> Task Planner
+  -> Validator
+  -> Run Loop Orchestrator
+      -> Skill Context Builder
+      -> Agent Adapter
+      -> Checks Runner
+      -> Review Runner
+      -> Artifact/State Writer
+  -> Loop Summary / Recovery
+```
+
+这个方向符合最初目标：PRD 和 task-plan 人工确认，Run Loop 不阻塞，异常只标状态，固定代码基座通过 template/skill 隔离，引擎通过 JSON 契约驱动多项目执行。
+
+## 当前架构缺陷
+
+1. **Review Runner 依赖 adapter 自报 changedFiles**
+
+   这是当前最大可信度缺口。真实执行器如果漏报 changedFiles，allowedPaths review 就可能被绕过。下一步应从 git diff 自动采集真实改动，并与 adapter 上报结果交叉校验。
+
+2. **Project/Workspace 管理仍然缺位**
+
+   多项目 schema 已有，但缺初始化、注册、路径校验、模板版本校验和 git 状态检查工具。真实项目接入时容易靠人工拼 JSON，出错成本高。
+
+3. **Agent Adapter 还没有真正的 Codex 执行器**
+
+   `shell` adapter 证明了执行器插槽可用，但它不是面向开发任务的真实 agent。后续需要 `codex` adapter 读取 task-context，执行受控开发，并输出 changedFiles/summary/errors。
+
+4. **Checks Runner 的鉴权能力还不完整**
+
+   HTTP 已能真实请求和校验状态码，但 token 注入、401/403 专项断言、404 专项断言、响应体断言、auth_disabled 环境白名单仍未完善。
+
+5. **Review Runner 还偏确定性规则**
+
+   当前能拦 allowedPaths 和 checks 证据，但还不能判断业务实现是否满足 PRD，也没有结合 skill qualityGates 做 RuoYi/Vben/UniApp 专项审查。
+
+6. **运行产物写入仍在 Run Loop 内部**
+
+   原子写入已经实现，但 task-context/task-run/review/run-state/summary 的写入逻辑仍耦合在 Run Loop。后续可抽成 Artifact Writer，降低 Run Loop 复杂度。
+
+7. **异常恢复还没有独立入口**
+
+   summary 已能列异常，但缺命令式恢复工具：查看 attempts、重置 checks_failed/review_failed、人工恢复 needs_human、继续下一轮。
+
+8. **PRD/Task Planner 仍是规则 MVP**
+
+   生成器能跑通，但复杂需求下还缺 openQuestions 关闭、权限/数据对象驱动的细粒度任务、手工编辑后的补全和 LLM 辅助拆分。
 
 ## 暂缓事项
 

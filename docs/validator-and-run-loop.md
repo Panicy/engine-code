@@ -37,7 +37,7 @@ Run Loop 负责推进任务状态。
 Validator
   -> 校验输入是否可信
 Run Loop
-  -> 推进任务执行
+  -> 编排 Skill Context、Agent Adapter、Checks Runner、Review Runner
 Validator
   -> 校验执行后状态是否一致
 ```
@@ -45,7 +45,7 @@ Validator
 可以理解为：
 
 - Validator 是守门员。
-- Run Loop 是推进器。
+- Run Loop 是编排器和状态推进器。
 
 ## Validator 设计
 
@@ -247,6 +247,7 @@ Run Loop 会写入：
 
 ```text
 run-state.json
+runs/<taskId>/task-context.json
 runs/<taskId>/task-run.json
 runs/<taskId>/review.json
 loop-summary.json
@@ -351,13 +352,13 @@ done
 6. 将依赖全部 done 的 pending 任务在 run-state 中标记为 ready。
 7. 找出 ready、checks_failed、review_failed 任务。
 8. 按 task-plan 顺序执行任务。
-9. 每个 task 执行前解析 base、template、skill。
-10. 构造 agent 输入。
-11. 调用 agent 执行。
-12. 收集改动文件和执行摘要。
-13. 运行 task checks。
+9. 每个 task 执行前通过 Skill Context Builder 解析 base、template、skill。
+10. 写入 `runs/<taskId>/task-context.json`。
+11. 调用 Agent Adapter 执行任务。
+12. Agent Adapter 返回 outcome，包括 summary、errors、changedFiles 等。
+13. Checks Runner 运行 task checks。
 14. checks 失败，标记 checks_failed；如达到 maxAttempts，标记 needs_human。
-15. checks 通过，进入 review。
+15. checks 通过，进入 Review Runner。
 16. review fail，标记 review_failed；如达到 maxAttempts，标记 needs_human。
 17. review needs_human，标记 needs_human。
 18. review pass，标记 done。
@@ -369,7 +370,13 @@ done
 
 ### 单个 Task 执行上下文
 
-Run Loop 调用 agent 前，需要构造稳定上下文。
+Run Loop 调用 Agent Adapter 前，需要构造稳定上下文。当前实现已将该职责独立为 Skill Context Builder。
+
+当前上下文产物写入：
+
+```text
+runs/<taskId>/task-context.json
+```
 
 建议字段：
 
@@ -382,6 +389,7 @@ Run Loop 调用 agent 前，需要构造稳定上下文。
   "base": {},
   "template": {},
   "skill": {},
+  "skillDocument": "",
   "allowedPaths": [],
   "contracts": {
     "backendApi": null,
@@ -405,14 +413,32 @@ Run Loop 调用 agent 前，需要构造稳定上下文。
 - 上一次失败原因。
 - 本次必须通过的 checks。
 
+Skill Context Builder 不执行任务、不修改业务代码，只负责材料完整、路径明确、引用可追踪。
+
+### Agent Adapter
+
+Agent Adapter 是 Run Loop 和真实执行器之间的边界。
+
+当前已支持：
+
+- `mock`：用于状态机和异常回归。
+- `shell`：真实执行一条 shell 命令，用于验证真实执行器插槽。
+
+后续需要接入：
+
+- `codex`：读取 task-context，调用真实 Codex 执行开发任务，并输出 changedFiles、summary、errors。
+
+Adapter 只返回执行 outcome，不直接修改 run-state，不直接写 task-run/review，不绕过 checks 和 review。
+
 ### Checks Runner
 
 Checks Runner 由 Run Loop 调用，但建议作为独立模块。
 
-第一版支持：
+当前支持：
 
-- `command`：执行本地命令，例如 build、lint、test。
-- `http`：请求本地接口，验证状态码和响应。
+- `real`：默认模式，真实执行 command 和 HTTP 检查。
+- `command`：`real` 的兼容别名。
+- `mock`：开发回归模式，生成通过结果或定点失败。
 - `manual`：只生成待人工验证项，不自动执行。
 
 后端重点检查：
@@ -432,9 +458,15 @@ Checks Runner 由 Run Loop 调用，但建议作为独立模块。
 - teardown 恢复失败时，当前 task 直接标记 `needs_human`。
 - 不允许在 production 环境执行 `auth_disabled` 检查。
 
+当前缺口：
+
+- token 注入尚未实现。
+- 响应体断言尚未实现。
+- auth_disabled 的环境白名单和恢复校验还需要增强。
+
 ### Reviewer
 
-Reviewer 由 Run Loop 调用，也建议作为独立模块。
+Reviewer 由 Run Loop 调用，当前已独立为 Review Runner。
 
 输入：
 
@@ -459,6 +491,21 @@ Reviewer 必须检查：
 - 修改是否满足 skill quality gates。
 - checks 结果是否真实覆盖 acceptance criteria。
 - 是否引入了 task-plan 未声明的新范围。
+
+当前已实现：
+
+- 检查 changedFiles 是否全部匹配 task.allowedPaths。
+- 检查必需 checks 是否都有结果且为 passed。
+- 写入标准 review.json。
+- review 失败时让 task 进入 review_failed，下一轮可重跑。
+
+当前缺口：
+
+- changedFiles 仍依赖 adapter 自报，尚未从 git diff 自动采集。
+- 未读取真实文件内容。
+- 未检查 skill qualityGates。
+- 未做后端/中台/客户端专项规则。
+- 未做模型语义审查。
 
 越界修改处理规则：
 
