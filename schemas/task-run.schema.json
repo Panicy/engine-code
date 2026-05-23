@@ -14,7 +14,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["attempt", "status", "agent", "startedAt", "promptInputs", "changedFiles", "checks", "summary"],
+        "required": ["attempt", "status", "agent", "startedAt", "promptInputs", "skillContext", "changedFiles", "checks", "summary"],
         "additionalProperties": false,
         "properties": {
           "attempt": { "type": "integer", "minimum": 1 },
@@ -37,9 +37,22 @@
               "required": ["type", "path"],
               "additionalProperties": false,
               "properties": {
-                "type": { "type": "string", "enum": ["prd", "taskPlan", "task", "skill", "runState", "previousAttempt", "notes"] },
+                "type": { "type": "string", "enum": ["prd", "taskPlan", "task", "skill", "skillContext", "runState", "previousAttempt", "notes"] },
                 "path": { "type": "string" }
               }
+            }
+          },
+          "skillContext": {
+            "type": "object",
+            "required": ["path", "skillId", "skillDocumentPath", "skillDocumentSha256", "enforced"],
+            "additionalProperties": false,
+            "description": "本次执行实际传给 agent 的 skill 上下文。用于审计 agent 是否拿到明确 skill 手册。",
+            "properties": {
+              "path": { "type": "string", "description": "Run Loop 生成的 task-context.json 路径。" },
+              "skillId": { "type": "string" },
+              "skillDocumentPath": { "type": "string", "description": "实际加载的 skill markdown 文档路径。" },
+              "skillDocumentSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "enforced": { "type": "boolean", "const": true, "description": "为 true 表示 adapter 执行前已生成并传入该上下文。" }
             }
           },
           "changedFiles": { "type": "array", "items": { "type": "string" } },

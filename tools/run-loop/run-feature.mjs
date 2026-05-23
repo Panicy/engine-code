@@ -260,25 +260,32 @@ function mergeTaskRun(existing, next) {
   };
 }
 
-function buildPromptInputs({ task, args, taskContextPath }) {
+function buildPromptInputs({ task, args, taskContext, taskContextPath }) {
   return [
     { type: 'prd', path: args.prd },
     { type: 'taskPlan', path: args['task-plan'] },
     { type: 'runState', path: args['run-state'] },
     { type: 'task', path: `${args['task-plan']}#${task.id}` },
-    { type: 'skill', path: task.requiredSkillId },
-    { type: 'notes', path: taskContextPath },
+    { type: 'skill', path: taskContext.skill.documentPath },
+    { type: 'skillContext', path: taskContextPath },
   ];
 }
 
-function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args, outcome, taskContextPath, changedFiles }) {
+function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, lastIssue, args, outcome, taskContext, taskContextPath, changedFiles }) {
   const item = {
     attempt,
     status,
     agent: outcome.agent,
     startedAt,
     finishedAt,
-    promptInputs: buildPromptInputs({ task, args, taskContextPath }),
+    promptInputs: buildPromptInputs({ task, args, taskContext, taskContextPath }),
+    skillContext: {
+      path: taskContextPath,
+      skillId: taskContext.skill.id,
+      skillDocumentPath: taskContext.skill.documentPath,
+      skillDocumentSha256: taskContext.skill.documentSha256,
+      enforced: true,
+    },
     changedFiles: changedFiles ?? [],
     checks: outcome.checks ?? [],
     summary: outcome.summary ?? '',
@@ -553,6 +560,7 @@ function runLoop(args) {
           lastIssue,
           args,
           taskContextPath,
+          taskContext,
           changedFiles,
           outcome: {
             ...normalizedOutcome,

@@ -928,6 +928,15 @@ function testHappyPath(baseDir) {
   const taskContext = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-context.json'));
   assert(taskContext.skill.id === 'ruoyi-module-crud', 'taskContext 应装配 requiredSkillId 对应的 skill');
   assert(taskContext.skill.document.includes('# Skill: ruoyi-module-crud'), 'taskContext 应包含 skill markdown 全文');
+  assert(/^[a-f0-9]{64}$/.test(taskContext.skill.documentSha256), 'taskContext 应记录 skill 文档 sha256');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  const attempt = taskRun.attempts[0];
+  assert(attempt.skillContext.enforced === true, 'task-run 应记录 skillContext.enforced=true');
+  assert(attempt.skillContext.skillId === 'ruoyi-module-crud', 'task-run 应记录实际执行 skillId');
+  assert(attempt.skillContext.skillDocumentPath === taskContext.skill.documentPath, 'task-run 应记录实际 skill 文档路径');
+  assert(attempt.skillContext.skillDocumentSha256 === taskContext.skill.documentSha256, 'task-run 应记录实际 skill 文档 hash');
+  assert(attempt.promptInputs.some((input) => input.type === 'skill' && input.path.endsWith('/skills/ruoyi-module-crud.md')), 'promptInputs 应指向实际 skill 文档');
+  assert(attempt.promptInputs.some((input) => input.type === 'skillContext' && input.path.endsWith('/runs/TASK-001/task-context.json')), 'promptInputs 应指向 task-context');
   validateFeature(paths);
 }
 
@@ -1659,14 +1668,31 @@ function testReviewAllowedPathsEmptyChangedFiles() {
 function testShellAdapterSuccess(baseDir) {
   const localProjectPath = writeProjectWithWorkspace(baseDir, 'local-workspace-project.json', '.');
   const paths = prepareApprovedFeature(baseDir, 'shell-adapter-success', { projectPath: localProjectPath });
+  const probePath = path.join(baseDir, 'shell-skill-probe.mjs');
+  fs.writeFileSync(probePath, [
+    "import fs from 'node:fs';",
+    "const contextPath = process.env.ENGINE_TASK_CONTEXT_PATH;",
+    "const skillPath = process.env.ENGINE_SKILL_DOCUMENT_PATH;",
+    "const skillHash = process.env.ENGINE_SKILL_DOCUMENT_SHA256;",
+    "const skillId = process.env.ENGINE_REQUIRED_SKILL_ID;",
+    "if (!contextPath || !fs.existsSync(contextPath)) throw new Error('missing ENGINE_TASK_CONTEXT_PATH');",
+    "if (!skillPath || !fs.existsSync(skillPath)) throw new Error('missing ENGINE_SKILL_DOCUMENT_PATH');",
+    "const context = JSON.parse(fs.readFileSync(contextPath, 'utf8'));",
+    "if (skillId !== context.task.requiredSkillId) throw new Error('skill id mismatch');",
+    "if (skillPath !== context.skill.documentPath) throw new Error('skill document path mismatch');",
+    "if (skillHash !== context.skill.documentSha256) throw new Error('skill hash mismatch');",
+    "if (!context.skill.document.includes('# Skill:')) throw new Error('missing skill document body');",
+    "console.log('shell-ok skill-context-read');",
+  ].join('\n'));
   const result = runLoop(paths, [
     '--agent-adapter', 'shell',
-    '--shell-command', `${process.execPath} -e "console.log('shell-ok')"`,
+    '--shell-command', `${process.execPath} ${probePath}`,
   ]);
   assert(result.summary.taskSummary.done.includes('TASK-001'), 'shell adapter 成功时任务应 done');
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   assert(taskRun.attempts[0].agent.tool === 'shell', 'task-run 应记录 shell agent');
-  assert(taskRun.attempts[0].summary.includes('shell-ok'), 'task-run 应记录 shell 输出摘要');
+  assert(taskRun.attempts[0].summary.includes('shell-ok skill-context-read'), 'shell adapter 应能读取 skill context');
+  assert(taskRun.attempts[0].skillContext.enforced === true, 'shell task-run 应记录 skillContext enforced');
 }
 
 function writeFakeCodex(baseDir) {

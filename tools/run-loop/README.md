@@ -23,6 +23,7 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapt
 - 同一轮内每个 task 最多执行一次，失败任务留到下一轮重跑。
 - `task-run.json` 会追加 attempts，不覆盖历史。
 - `task-run.json` 的 `changedFiles` 由目标基座 git diff 自动采集，不接受 adapter 自报。
+- Run Loop 在调用 adapter 前必须生成 `runs/<taskId>/task-context.json`，并把实际 skill 文档路径和 SHA-256 写入 `task-run.json` 的 `skillContext`。如果 skill 文档缺失，任务会进入 `needs_human`，不会绕过 skill 执行。
 - 调用 Validator 做后置校验。
 
 ## 使用方式
@@ -98,7 +99,7 @@ node tools/run-loop/run-feature.mjs \
   --codex-model gpt-5
 ```
 
-Codex Adapter 只执行当前 task。Run Loop 会先写入 `runs/<taskId>/task-context.json`，Codex Adapter 再把该文件路径写入最后一个 prompt 参数。Adapter 不写 run-state/task-run/review，不执行 checks，不做 allowedPaths 审查，也不提供可信 `changedFiles`；可信变更列表仍由 Run Loop 的 git diff collector 采集。未传 `--codex-extra-arg` 时默认使用 `exec`，即默认调用形态接近 `codex exec "<prompt>"`。
+Codex Adapter 只执行当前 task。Run Loop 会先写入 `runs/<taskId>/task-context.json`，Codex Adapter 再把该文件路径写入最后一个 prompt 参数，并要求执行器读取其中的 skill 文档。Adapter 不写 run-state/task-run/review，不执行 checks，不做 allowedPaths 审查，也不提供可信 `changedFiles`；可信变更列表仍由 Run Loop 的 git diff collector 采集。未传 `--codex-extra-arg` 时默认使用 `exec`，即默认调用形态接近 `codex exec "<prompt>"`。
 
 External Agent 示例：
 
@@ -114,6 +115,13 @@ node tools/run-loop/run-feature.mjs \
 ```
 
 External Agent Adapter 只要求外部命令能读取最后一个 prompt 参数中的 `task-context.json` 路径，并在当前 workspace 内完成单个 task。它可以是 Codex、Claude Code、自研 worker、HTTP 包装脚本或任何本地可执行代理。Run Loop 仍统一负责 git diff、checks、review 和状态流转。
+
+Shell Adapter 会把以下环境变量传给命令，便于自研 worker 或测试脚本强制读取 skill：
+
+- `ENGINE_TASK_CONTEXT_PATH`
+- `ENGINE_REQUIRED_SKILL_ID`
+- `ENGINE_SKILL_DOCUMENT_PATH`
+- `ENGINE_SKILL_DOCUMENT_SHA256`
 
 ## Checks Runner
 

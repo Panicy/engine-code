@@ -11,7 +11,7 @@ function createShellAdapter() {
     id: 'shell',
     tool: 'shell',
     model: 'local',
-    execute({ args, task, taskContext }) {
+    execute({ args, task, taskContext, taskContextPath }) {
       const command = args['shell-command'];
       if (!command) {
         return {
@@ -66,6 +66,13 @@ function createShellAdapter() {
         encoding: 'utf8',
         timeout: timeoutMs,
         maxBuffer: 1024 * 1024,
+        env: {
+          ...process.env,
+          ENGINE_TASK_CONTEXT_PATH: taskContextPath ?? '',
+          ENGINE_REQUIRED_SKILL_ID: task.requiredSkillId,
+          ENGINE_SKILL_DOCUMENT_PATH: taskContext.skill?.documentPath ?? '',
+          ENGINE_SKILL_DOCUMENT_SHA256: taskContext.skill?.documentSha256 ?? '',
+        },
       });
       const summary = outputSummary(result);
       if (result.status === 0) {

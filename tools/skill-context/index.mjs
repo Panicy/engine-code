@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 function flattenTasks(taskPlan) {
   return taskPlan.storyGroups.flatMap((group) => group.tasks.map((task) => ({
@@ -16,6 +17,10 @@ function readJson(filePath) {
 function readTextIfExists(filePath) {
   if (!fs.existsSync(filePath)) return null;
   return fs.readFileSync(filePath, 'utf8');
+}
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function resolveSkillDocPath({ templatesDir, templateId, skill }) {
@@ -103,6 +108,7 @@ function buildTaskContext({ project, prd, taskPlan, taskId, templatesDir = '.eng
       qualityGates: skill.qualityGates,
       promptAddendum: skill.promptAddendum ?? '',
       documentPath: skillDocPath,
+      documentSha256: sha256(skillDocument),
       document: skillDocument,
     },
     executionHints: {

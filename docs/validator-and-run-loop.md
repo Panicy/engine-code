@@ -354,7 +354,7 @@ done
 8. 按 task-plan 顺序执行任务。
 9. 每个 task 执行前通过 Skill Context Builder 解析 base、template、skill。
 10. 写入 `runs/<taskId>/task-context.json`。
-11. 调用 Agent Adapter 执行任务。
+11. 调用 Agent Adapter 执行任务。执行前必须生成 `task-context.json`，并在 `task-run.json` 记录 `skillContext.path`、`skillContext.skillId`、`skillContext.skillDocumentPath`、`skillContext.skillDocumentSha256`。
 12. Agent Adapter 返回 outcome，包括 summary、errors 等。
 13. Checks Runner 运行 task checks。
 14. checks 失败，标记 checks_failed；如达到 maxAttempts，标记 needs_human。
@@ -370,7 +370,7 @@ done
 
 ### 单个 Task 执行上下文
 
-Run Loop 调用 Agent Adapter 前，需要构造稳定上下文。当前实现已将该职责独立为 Skill Context Builder。
+Run Loop 调用 Agent Adapter 前，需要构造稳定上下文。当前实现已将该职责独立为 Skill Context Builder。该上下文不是参考材料，而是执行前置条件：如果 `requiredSkillId` 找不到、skill markdown 缺失或路径越界，Run Loop 必须把 task 标记为 `needs_human`，不能继续调用开发执行器。
 
 当前上下文产物写入：
 
@@ -427,6 +427,8 @@ Agent Adapter 是 Run Loop 和真实执行器之间的边界。
 - `codex`：Codex CLI 兼容实现，是 external agent 模式的一个内置便捷入口。
 
 Adapter 只返回执行 outcome，不直接修改 run-state，不直接写 task-run/review，不绕过 checks 和 review。
+
+所有真实执行器都必须能拿到 `task-context.json`。`codex` 和 `external` adapter 通过 prompt 传入路径；`shell` adapter 通过 `ENGINE_TASK_CONTEXT_PATH`、`ENGINE_REQUIRED_SKILL_ID`、`ENGINE_SKILL_DOCUMENT_PATH`、`ENGINE_SKILL_DOCUMENT_SHA256` 环境变量传入路径与 hash。`task-run.attempts[].skillContext` 是审计字段，用来确认本次执行绑定的是哪份 skill 手册。
 
 ### Checks Runner
 
