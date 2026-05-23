@@ -973,6 +973,81 @@ function testRuntimeRunnerCliMock(baseDir) {
   assert(fs.existsSync(path.join(outDir, 'middle-runtime.json')), 'runtime runner 应写 middle artifact');
 }
 
+function testEngineCliHelp() {
+  const result = runNode(['tools/cli/engine.mjs', '--help']);
+  assert(result.stdout.includes('init-project'), 'CLI help 应展示 init-project');
+  assert(result.stdout.includes('run'), 'CLI help 应展示 run');
+  assert(result.stdout.includes('status'), 'CLI help 应展示 status');
+}
+
+function testEngineCliThinFlow(baseDir) {
+  const root = path.join(baseDir, 'engine-cli-thin-flow');
+  const backendWorkspace = path.join(root, 'backend');
+  const middleWorkspace = path.join(root, 'middle');
+  const project = path.join(root, 'project.json');
+  const feature = path.join(root, 'features', 'application-management');
+  initGitWorkspace(backendWorkspace, { 'README.md': 'backend workspace\n' });
+  initGitWorkspace(middleWorkspace, { 'README.md': 'middle workspace\n' });
+
+  const projectResult = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'init-project',
+    '--project-id', 'engine-cli-demo',
+    '--name', 'CLI 示例项目',
+    '--backend', backendWorkspace,
+    '--middle', middleWorkspace,
+    '--out', project,
+    '--force',
+  ]));
+  assert(projectResult.ok === true, 'CLI init-project 应成功');
+
+  const featureResult = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'init-feature',
+    '--project', project,
+    '--feature-id', 'application-management',
+    '--name', '应用管理',
+    '--summary', '应用新增、编辑、上下架和列表查询',
+    '--bases', 'backend,middle',
+    '--out-dir', feature,
+    '--approve',
+    '--by', 'e2e',
+    '--force',
+  ]));
+  assert(featureResult.ok === true, 'CLI init-feature 应成功');
+
+  const runtimeResult = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'runtime',
+    '--project', project,
+    '--feature', feature,
+    '--mode', 'mock',
+    '--base-ids', 'backend,middle',
+  ]));
+  assert(runtimeResult.ok === true, 'CLI runtime mock 应成功');
+
+  const runResult = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'run',
+    '--project', project,
+    '--feature', feature,
+    '--agent-adapter', 'mock',
+    '--runtime-mode', 'mock',
+    '--checks-mode', 'mock',
+  ]));
+  assert(runResult.summary.status === 'complete', 'CLI run 应完成全部任务');
+
+  runNode(['tools/cli/engine.mjs', 'status', '--feature', feature]);
+  const backendRuntimePath = path.join(feature, 'runs', 'runtime', 'backend-runtime.json');
+  const runState = readJson(path.join(feature, 'run-state.json'));
+  const taskRunArtifact = runState.artifacts.find((artifact) => artifact.type === 'taskRun');
+  assert(fs.existsSync(backendRuntimePath), 'CLI flow 应生成 runtime artifact');
+  assert(taskRunArtifact, 'CLI flow 应记录 task run artifact');
+  assert(fs.existsSync(taskRunArtifact.path), 'CLI flow 应生成 task run artifact');
+  const taskRun = readJson(taskRunArtifact.path);
+  assert(taskRun.attempts[0].skillContext?.enforced === true, 'CLI flow 应保留 skill context 强制执行标记');
+}
+
 function testUnknownAgentAdapter(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'unknown-agent-adapter');
   const result = runNode([
@@ -2318,6 +2393,8 @@ const tests = [
   ['完整主流程', testHappyPath],
   ['Run Loop Runtime Profile mock', testRunLoopRuntimeProfileMock],
   ['Runtime Runner CLI mock', testRuntimeRunnerCliMock],
+  ['Engine CLI help', testEngineCliHelp],
+  ['Engine CLI 薄流程', testEngineCliThinFlow],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],
   ['Checks Runner 定点失败', testChecksRunnerFailure],
