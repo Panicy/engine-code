@@ -63,6 +63,38 @@
       },
       "default": {}
     },
+    "runtimeProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "模板运行时画像。用于 Run Loop 在开发任务前做基座启动前检查、健康检查和浏览器运行时检查。",
+      "properties": {
+        "preflightCommands": {
+          "type": "array",
+          "description": "启动前检查命令，例如环境变量、Node、pnpm、MySQL、Redis。",
+          "items": { "$ref": "#/$defs/runtimeCommand" },
+          "default": []
+        },
+        "startCommands": {
+          "type": "array",
+          "description": "推荐启动命令。当前作为运行提示和人工/外部进程管理依据，不由 check 模式直接执行长驻进程。",
+          "items": { "$ref": "#/$defs/runtimeCommand" },
+          "default": []
+        },
+        "healthChecks": {
+          "type": "array",
+          "description": "启动后健康检查。",
+          "items": { "$ref": "#/$defs/runtimeCheck" },
+          "default": []
+        },
+        "browserChecks": {
+          "type": "array",
+          "description": "浏览器运行时检查，例如首页打开和 console error 检查。",
+          "items": { "$ref": "#/$defs/browserCheck" },
+          "default": []
+        }
+      },
+      "default": {}
+    },
     "pathPolicy": {
       "type": "object",
       "required": ["defaultAllowedPaths"],
@@ -105,6 +137,47 @@
         "type": { "type": "string", "enum": ["build", "lint", "typecheck", "unit", "api", "e2e", "health", "command"], "description": "检查类型。" },
         "command": { "type": "string", "description": "检查命令。" },
         "required": { "type": "boolean", "description": "是否必须通过。" }
+      }
+    },
+    "runtimeCommand": {
+      "type": "object",
+      "required": ["id", "command", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "description": { "type": "string", "default": "" }
+      }
+    },
+    "runtimeCheck": {
+      "type": "object",
+      "required": ["id", "type", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "enum": ["http", "command"] },
+        "target": { "type": "string", "description": "http URL 或 command 字符串。" },
+        "expectedStatuses": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 100, "maximum": 599 },
+          "default": []
+        },
+        "required": { "type": "boolean" },
+        "description": { "type": "string", "default": "" }
+      }
+    },
+    "browserCheck": {
+      "type": "object",
+      "required": ["id", "url", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "failOnConsoleError": { "type": "boolean", "default": true },
+        "waitMs": { "type": "integer", "minimum": 0, "maximum": 60000, "default": 3000 },
+        "description": { "type": "string", "default": "" }
       }
     }
   }

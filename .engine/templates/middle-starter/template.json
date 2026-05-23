@@ -21,6 +21,51 @@
       }
     ]
   },
+  "runtimeProfile": {
+    "preflightCommands": [
+      {
+        "id": "middle-preflight",
+        "command": "bash script/bin/middle-preflight-check.sh",
+        "required": true,
+        "description": "检查 Node、pnpm 和 .env.development 必填项。"
+      }
+    ],
+    "startCommands": [
+      {
+        "id": "middle-dev",
+        "command": "pnpm dev:antd",
+        "required": true,
+        "description": "启动 Vben 中台 dev server。"
+      }
+    ],
+    "healthChecks": [
+      {
+        "id": "middle-health-script",
+        "type": "command",
+        "target": "bash script/bin/middle-health-check.sh",
+        "required": true,
+        "description": "检查中台首页和后端代理目标。"
+      },
+      {
+        "id": "middle-home",
+        "type": "http",
+        "target": "http://127.0.0.1:5666/",
+        "expectedStatuses": [200, 301, 302, 304],
+        "required": true,
+        "description": "中台首页应可访问。"
+      }
+    ],
+    "browserChecks": [
+      {
+        "id": "middle-console",
+        "url": "http://127.0.0.1:5666/",
+        "required": true,
+        "failOnConsoleError": true,
+        "waitMs": 5000,
+        "description": "打开中台首页并捕获 console error 和 pageerror。"
+      }
+    ]
+  },
   "pathPolicy": {
     "defaultAllowedPaths": [
       "apps/web-antd/src/api/**",

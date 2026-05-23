@@ -940,6 +940,39 @@ function testHappyPath(baseDir) {
   validateFeature(paths);
 }
 
+function testRunLoopRuntimeProfileMock(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'runtime-profile-mock');
+  const result = runLoop(paths, ['--agent-adapter', 'mock', '--runtime-mode', 'mock', '--max-tasks', '1']);
+  assert(result.executedTaskIds.includes('TASK-001'), 'runtime mock 通过后 Run Loop 应继续执行任务');
+  const backendRuntimePath = path.join(paths.dir, 'runs', 'runtime', 'backend-runtime.json');
+  const middleRuntimePath = path.join(paths.dir, 'runs', 'runtime', 'middle-runtime.json');
+  assert(fs.existsSync(backendRuntimePath), 'Run Loop 应写入 backend runtime 产物');
+  assert(fs.existsSync(middleRuntimePath), 'Run Loop 应写入 middle runtime 产物');
+  const backendRuntime = readJson(backendRuntimePath);
+  const middleRuntime = readJson(middleRuntimePath);
+  assert(backendRuntime.status === 'passed', 'backend runtime mock 应通过');
+  assert(middleRuntime.status === 'passed', 'middle runtime mock 应通过');
+  assert(middleRuntime.checks.some((check) => check.type === 'browser' && check.id === 'middle-console'), 'middle runtime 应包含 browser console 检查');
+  const runState = readJson(paths.runState);
+  assert(runState.artifacts.some((artifact) => artifact.type === 'runtime' && artifact.path.endsWith('backend-runtime.json')), 'run-state 应记录 runtime artifact');
+  validateFeature(paths);
+}
+
+function testRuntimeRunnerCliMock(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'runtime-runner-cli');
+  const outDir = path.join(paths.dir, 'runtime-out');
+  const result = parseCommandJson(runNode([
+    'tools/runtime-runner/run-runtime.mjs',
+    '--project', paths.projectPath,
+    '--out-dir', outDir,
+    '--base-ids', 'backend,middle',
+    '--mode', 'mock',
+  ]));
+  assert(result.ok === true, 'runtime runner mock 应通过');
+  assert(fs.existsSync(path.join(outDir, 'backend-runtime.json')), 'runtime runner 应写 backend artifact');
+  assert(fs.existsSync(path.join(outDir, 'middle-runtime.json')), 'runtime runner 应写 middle artifact');
+}
+
 function testUnknownAgentAdapter(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'unknown-agent-adapter');
   const result = runNode([
@@ -2283,6 +2316,8 @@ const tests = [
   ['Project Init feature 生成 prd/task-plan/run-state', testProjectInitCreateFeatureWithPrdApproval],
   ['Project Init feature 显式 approve 后校验通过', testProjectInitCreateFeatureApprovedValidates],
   ['完整主流程', testHappyPath],
+  ['Run Loop Runtime Profile mock', testRunLoopRuntimeProfileMock],
+  ['Runtime Runner CLI mock', testRuntimeRunnerCliMock],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],
   ['Checks Runner 定点失败', testChecksRunnerFailure],

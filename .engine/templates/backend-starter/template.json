@@ -23,6 +23,56 @@
       }
     ]
   },
+  "runtimeProfile": {
+    "preflightCommands": [
+      {
+        "id": "java-version",
+        "command": "java -version",
+        "required": true,
+        "description": "确认 JDK 可用。"
+      },
+      {
+        "id": "maven-version",
+        "command": "mvn -version",
+        "required": true,
+        "description": "确认 Maven 可用。"
+      }
+    ],
+    "startCommands": [
+      {
+        "id": "backend-dev",
+        "command": "mvn -pl ruoyi-admin -am spring-boot:run -Dspring-boot.run.profiles=dev",
+        "required": true,
+        "description": "启动 RuoYi 后端 dev profile。"
+      }
+    ],
+    "healthChecks": [
+      {
+        "id": "backend-root",
+        "type": "http",
+        "target": "http://127.0.0.1:8088/",
+        "expectedStatuses": [200],
+        "required": true,
+        "description": "后端根路径应可访问。"
+      },
+      {
+        "id": "backend-actuator",
+        "type": "http",
+        "target": "http://127.0.0.1:8088/actuator/health",
+        "expectedStatuses": [200, 401, 403],
+        "required": true,
+        "description": "监控端点 200/401/403 均视为服务可达。"
+      },
+      {
+        "id": "backend-health-script",
+        "type": "command",
+        "target": "bash script/bin/backend-health-check.sh",
+        "required": false,
+        "description": "基座内置健康检查脚本。"
+      }
+    ],
+    "browserChecks": []
+  },
   "pathPolicy": {
     "defaultAllowedPaths": [
       "ruoyi-admin/**",

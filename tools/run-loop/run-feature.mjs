@@ -9,6 +9,7 @@ import { availableAgentAdapters, createAgentAdapter } from '../agent-adapters/in
 import { runChecks } from '../checks-runner/index.mjs';
 import { buildTaskContext } from '../skill-context/index.mjs';
 import { runReview } from '../review-runner/index.mjs';
+import { runRuntimeProfiles } from '../runtime-runner/index.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,6 +27,7 @@ function usage() {
     '  --templates-dir .engine/templates',
     `  --agent-adapter ${availableAgentAdapters().join('|')}`,
     '  --checks-mode real|mock|command',
+    '  --runtime-mode skip|mock|check',
     '  --max-tasks 0',
     '  --mock-fail-task TASK-001',
     '  --mock-fail-stage check|review|human',
@@ -53,6 +55,7 @@ function parseArgs(argv) {
     'templates-dir',
     'agent-adapter',
     'checks-mode',
+    'runtime-mode',
     'max-tasks',
     'mock-fail-task',
     'mock-fail-stage',
@@ -187,6 +190,10 @@ function addMinutesIso(minutes) {
 
 function flattenTasks(taskPlan) {
   return taskPlan.storyGroups.flatMap((group) => group.tasks.map((task) => ({ ...task, storyId: group.storyId, storyTitle: group.title })));
+}
+
+function baseIdsForRunnableTasks(taskPlan) {
+  return [...new Set(flattenTasks(taskPlan).map((task) => task.targetBaseId))];
 }
 
 function taskMap(taskPlan) {
@@ -443,7 +450,35 @@ function buildLoopSummary({ runState, taskPlan, startedAt, finishedAt, executedT
   };
 }
 
-function runLoop(args) {
+async function runRuntimePreflight({ args, project, taskPlan, runState, templatesDir, featureDir }) {
+  const runtimeMode = args['runtime-mode'] ?? 'skip';
+  if (!['skip', 'mock', 'check'].includes(runtimeMode)) {
+    throw new Error('--runtime-mode 必须是 skip、mock 或 check。');
+  }
+  if (runtimeMode === 'skip') return [];
+  const runtimeDir = path.join(featureDir, 'runs', 'runtime');
+  const results = await runRuntimeProfiles({
+    project,
+    templatesDir,
+    baseIds: baseIdsForRunnableTasks(taskPlan),
+    mode: runtimeMode,
+    repoRoot,
+  });
+  for (const result of results) {
+    const runtimePath = path.join(runtimeDir, `${result.baseId}-runtime.json`);
+    writeJsonAtomic(runtimePath, result);
+    if (!runState.artifacts.some((artifact) => artifact.type === 'runtime' && artifact.path === runtimePath)) {
+      runState.artifacts.push({ type: 'runtime', path: runtimePath });
+    }
+  }
+  const failed = results.filter((result) => result.status !== 'passed');
+  if (failed.length > 0) {
+    throw new Error(`Runtime Profile 检查失败：${failed.map((item) => `${item.baseId}=${item.status}`).join(', ')}`);
+  }
+  return results;
+}
+
+async function runLoop(args) {
   requireArg(args, 'project');
   requireArg(args, 'prd');
   requireArg(args, 'task-plan');
@@ -475,6 +510,7 @@ function runLoop(args) {
     'templates-dir': templatesDir,
   });
   validateOrThrow(preReport, 'Run Loop 前置 Validator');
+  await runRuntimePreflight({ args, project, taskPlan, runState, templatesDir, featureDir });
 
   const executedTaskIds = [];
   acquireLock(runState, owner, startedAt);
@@ -642,14 +678,14 @@ function runLoop(args) {
   return { ok: true, loopSummaryPath: path.resolve(repoRoot, loopSummaryPath), executedTaskIds, summary: loopSummary };
 }
 
-function main() {
+async function main() {
   try {
     const args = parseArgs(process.argv);
     if (args.help) {
       console.log(usage());
       return;
     }
-    const result = runLoop(args);
+    const result = await runLoop(args);
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
     console.error(error.message);

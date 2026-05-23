@@ -50,7 +50,7 @@
         "required": ["type", "path"],
         "additionalProperties": false,
         "properties": {
-          "type": { "type": "string", "enum": ["taskContext", "taskRun", "review", "log", "report", "patch"] },
+          "type": { "type": "string", "enum": ["taskContext", "taskRun", "review", "runtime", "log", "report", "patch"] },
           "path": { "type": "string" }
         }
       }

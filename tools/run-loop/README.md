@@ -24,6 +24,7 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapt
 - `task-run.json` 会追加 attempts，不覆盖历史。
 - `task-run.json` 的 `changedFiles` 由目标基座 git diff 自动采集，不接受 adapter 自报。
 - Run Loop 在调用 adapter 前必须生成 `runs/<taskId>/task-context.json`，并把实际 skill 文档路径和 SHA-256 写入 `task-run.json` 的 `skillContext`。如果 skill 文档缺失，任务会进入 `needs_human`，不会绕过 skill 执行。
+- `--runtime-mode mock|check` 会在开发任务前按模板 `runtimeProfile` 生成 `runs/runtime/<baseId>-runtime.json`。`skip` 为默认值，避免旧流程被本地环境阻断。
 - 调用 Validator 做后置校验。
 
 ## 使用方式
@@ -42,6 +43,7 @@ node tools/run-loop/run-feature.mjs \
 --templates-dir .engine/templates
 --agent-adapter mock
 --checks-mode real
+--runtime-mode skip
 --max-tasks 1
 --mock-fail-task TASK-001
 --mock-fail-stage check
@@ -59,6 +61,25 @@ node tools/run-loop/run-feature.mjs \
 ```
 
 `--max-tasks 0` 表示本轮尽量跑完所有可运行任务。
+
+## Runtime Profile
+
+项目启动能力属于模板运行层，不属于业务开发 skill。模板可在 `template.json` 中声明：
+
+- `runtimeProfile.preflightCommands`：启动前检查，例如 JDK、Maven、Node、pnpm、环境文件。
+- `runtimeProfile.startCommands`：推荐启动命令，当前用于记录和提示，避免 Run Loop 直接阻塞在长驻进程。
+- `runtimeProfile.healthChecks`：HTTP 或脚本健康检查。
+- `runtimeProfile.browserChecks`：浏览器打开页面并捕获 console error/pageerror。
+
+单独运行：
+
+```bash
+node tools/runtime-runner/run-runtime.mjs \
+  --project features/demo/project.json \
+  --out-dir features/demo/runs/runtime \
+  --base-ids backend,middle \
+  --mode check
+```
 
 ## Agent Adapter
 

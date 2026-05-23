@@ -348,24 +348,25 @@ done
 2. 执行 Validator。
 3. 如果存在 error，停止本轮。
 4. 检查 PRD 和 task-plan 是否已人工确认。
-5. 获取 feature 级运行锁，失败则停止本轮。
-6. 将依赖全部 done 的 pending 任务在 run-state 中标记为 ready。
-7. 找出 ready、checks_failed、review_failed 任务。
-8. 按 task-plan 顺序执行任务。
-9. 每个 task 执行前通过 Skill Context Builder 解析 base、template、skill。
-10. 写入 `runs/<taskId>/task-context.json`。
-11. 调用 Agent Adapter 执行任务。执行前必须生成 `task-context.json`，并在 `task-run.json` 记录 `skillContext.path`、`skillContext.skillId`、`skillContext.skillDocumentPath`、`skillContext.skillDocumentSha256`。
-12. Agent Adapter 返回 outcome，包括 summary、errors 等。
-13. Checks Runner 运行 task checks。
-14. checks 失败，标记 checks_failed；如达到 maxAttempts，标记 needs_human。
-15. checks 通过，进入 Review Runner。
-16. review fail，标记 review_failed；如达到 maxAttempts，标记 needs_human。
-17. review needs_human，标记 needs_human。
-18. review pass，标记 done。
-19. 原子写入 task-run.json、review.json、run-state.json。
-20. 本轮结束写入 loop-summary.json。
-21. 释放运行锁。
-22. 再执行一次 Validator，确认执行后状态一致。
+5. 如果启用 `--runtime-mode mock|check`，按 template runtimeProfile 执行基座运行时检查，写入 `runs/runtime/<baseId>-runtime.json`。
+6. 获取 feature 级运行锁，失败则停止本轮。
+7. 将依赖全部 done 的 pending 任务在 run-state 中标记为 ready。
+8. 找出 ready、checks_failed、review_failed 任务。
+9. 按 task-plan 顺序执行任务。
+10. 每个 task 执行前通过 Skill Context Builder 解析 base、template、skill。
+11. 写入 `runs/<taskId>/task-context.json`。
+12. 调用 Agent Adapter 执行任务。执行前必须生成 `task-context.json`，并在 `task-run.json` 记录 `skillContext.path`、`skillContext.skillId`、`skillContext.skillDocumentPath`、`skillContext.skillDocumentSha256`。
+13. Agent Adapter 返回 outcome，包括 summary、errors 等。
+14. Checks Runner 运行 task checks。
+15. checks 失败，标记 checks_failed；如达到 maxAttempts，标记 needs_human。
+16. checks 通过，进入 Review Runner。
+17. review fail，标记 review_failed；如达到 maxAttempts，标记 needs_human。
+18. review needs_human，标记 needs_human。
+19. review pass，标记 done。
+20. 原子写入 task-run.json、review.json、run-state.json。
+21. 本轮结束写入 loop-summary.json。
+22. 释放运行锁。
+23. 再执行一次 Validator，确认执行后状态一致。
 ```
 
 ### 单个 Task 执行上下文
@@ -429,6 +430,23 @@ Agent Adapter 是 Run Loop 和真实执行器之间的边界。
 Adapter 只返回执行 outcome，不直接修改 run-state，不直接写 task-run/review，不绕过 checks 和 review。
 
 所有真实执行器都必须能拿到 `task-context.json`。`codex` 和 `external` adapter 通过 prompt 传入路径；`shell` adapter 通过 `ENGINE_TASK_CONTEXT_PATH`、`ENGINE_REQUIRED_SKILL_ID`、`ENGINE_SKILL_DOCUMENT_PATH`、`ENGINE_SKILL_DOCUMENT_SHA256` 环境变量传入路径与 hash。`task-run.attempts[].skillContext` 是审计字段，用来确认本次执行绑定的是哪份 skill 手册。
+
+### Runtime Profile
+
+项目启动属于模板运行层，不属于业务 task skill。模板通过 `template.json.runtimeProfile` 声明启动前检查、推荐启动命令、健康检查和浏览器检查。Run Loop 默认 `--runtime-mode skip`，保持旧流程不被本地环境阻断；真实项目验证可使用 `--runtime-mode check`，先确认后端、中台等基座已经可运行，再进入 task 执行。
+
+Runtime 产物写入：
+
+```text
+runs/runtime/<baseId>-runtime.json
+```
+
+其中包含：
+
+- `preflight`：例如 JDK/Maven/Node/pnpm/.env 检查。
+- `health`：HTTP 或脚本健康检查。
+- `browser`：打开页面并捕获 `console.error` 和 `pageerror`。
+- `startCommands`：模板推荐启动命令，作为外部进程管理或人工启动依据。
 
 ### Checks Runner
 
