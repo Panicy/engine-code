@@ -53,6 +53,28 @@ node tools/cli/engine.mjs status \
   --feature .engine/projects/demo/features/app-management
 ```
 
+## 真实项目测试
+
+`real-test` 会调用固定三端基座真实项目测试流程：拉取 backend / middle / client 固定基座，创建 `project.json`，执行后端 bootstrap，并跑真实需求 smoke 场景。
+
+```bash
+MYSQL_PWD='romantic.' node tools/cli/engine.mjs real-test \
+  --mysql-command /usr/local/mysql/bin/mysql \
+  --mysql-user root \
+  --mysql-password-env MYSQL_PWD \
+  --database aitest \
+  --redis-url redis://default:root123@127.0.0.1:6379 \
+  --keep-tmp
+```
+
+调试引擎本体时可以使用本地 source template，避免网络 clone 和数据库依赖：
+
+```bash
+node tools/cli/engine.mjs real-test \
+  --clone-mode source-template \
+  --skip-bootstrap
+```
+
 ## 任务恢复
 
 ```bash

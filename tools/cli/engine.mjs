@@ -31,6 +31,7 @@ function usage() {
     '  init-feature   创建并可确认 prd/task-plan/run-state',
     '  runtime        执行 Runtime Profile 检查',
     '  run            执行 Run Loop',
+    '  real-test      执行固定三端基座真实项目测试',
     '  status         查看异常任务',
     '  show-task      查看单个 task 运行记录',
     '  retry          将异常 task 恢复为 ready',
@@ -41,6 +42,7 @@ function usage() {
     '  engine init-feature --project .engine/projects/demo/project.json --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
     '  engine runtime --feature .engine/projects/demo/features/app --mode mock',
     '  engine run --feature .engine/projects/demo/features/app --runtime-mode mock --checks-mode mock',
+    '  MYSQL_PWD=romantic. engine real-test --mysql-command /usr/local/mysql/bin/mysql --mysql-user root --mysql-password-env MYSQL_PWD --database aitest --redis-url redis://default:root123@127.0.0.1:6379',
     '  engine status --feature .engine/projects/demo/features/app',
   ].join('\n');
 }
@@ -54,7 +56,7 @@ function parseOptions(argv) {
       continue;
     }
     const key = arg.slice(2);
-    if (['force', 'approve'].includes(key)) {
+    if (['force', 'approve', 'keep-tmp', 'skip-bootstrap'].includes(key)) {
       options[key] = true;
       continue;
     }
@@ -219,6 +221,32 @@ function run(options) {
   runNode(args[0], args.slice(1));
 }
 
+function realTest(options) {
+  const args = ['tools/real-project-runner/run-real-project.mjs'];
+  for (const key of [
+    'project-id',
+    'project-name',
+    'tmp-root',
+    'clone-mode',
+    'mysql-command',
+    'mysql-host',
+    'mysql-port',
+    'mysql-user',
+    'mysql-password-env',
+    'mysql-password-source',
+    'database',
+    'redis-url',
+    'redis-command',
+    'adapter',
+    'codex-command',
+  ]) {
+    if (options[key]) args.push(`--${key}`, options[key]);
+  }
+  if (options['keep-tmp']) args.push('--keep-tmp');
+  if (options['skip-bootstrap']) args.push('--skip-bootstrap');
+  runNode(args[0], args.slice(1));
+}
+
 function status(options) {
   const featureDir = inferFeatureDir(options);
   const files = featureFiles(featureDir);
@@ -264,6 +292,7 @@ function main() {
       'init-feature': initFeature,
       runtime,
       run,
+      'real-test': realTest,
       status,
       'show-task': showTask,
       retry: (opts) => resolveTask(opts, 'retry'),

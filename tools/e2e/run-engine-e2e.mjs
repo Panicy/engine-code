@@ -1048,6 +1048,22 @@ function testEngineCliThinFlow(baseDir) {
   assert(taskRun.attempts[0].skillContext?.enforced === true, 'CLI flow 应保留 skill context 强制执行标记');
 }
 
+function testEngineCliRealTestSourceTemplate() {
+  const result = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'real-test',
+    '--clone-mode',
+    'source-template',
+    '--skip-bootstrap',
+    '--adapter',
+    'shell',
+  ]));
+  assert(result.ok === true, 'CLI real-test source-template 模式应通过');
+  assert(result.cloneMode === 'source-template', 'CLI real-test 应转发 clone-mode');
+  assert(result.bootstrap.skipped === true, 'CLI real-test 应转发 skip-bootstrap');
+  assert(result.scenarios.length === 3, 'CLI real-test 应运行 3 个 smoke 场景');
+}
+
 function testUnknownAgentAdapter(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'unknown-agent-adapter');
   const result = runNode([
@@ -2395,6 +2411,7 @@ const tests = [
   ['Runtime Runner CLI mock', testRuntimeRunnerCliMock],
   ['Engine CLI help', testEngineCliHelp],
   ['Engine CLI 薄流程', testEngineCliThinFlow],
+  ['Engine CLI real-test source-template', testEngineCliRealTestSourceTemplate],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],
   ['Checks Runner 定点失败', testChecksRunnerFailure],
