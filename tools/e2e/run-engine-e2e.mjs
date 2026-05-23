@@ -590,6 +590,24 @@ function testBaseBootstrapReadyAndPartial(baseDir) {
   assert(partialState.issues.some((item) => item.code === 'BASELINE_PARTIAL'), '残缺基座应记录 BASELINE_PARTIAL');
 }
 
+function testRealProjectRunnerSourceTemplate() {
+  const result = parseCommandJson(runNode([
+    'tools/real-project-runner/run-real-project.mjs',
+    '--clone-mode',
+    'source-template',
+    '--skip-bootstrap',
+    '--adapter',
+    'shell',
+  ]));
+  assert(result.ok === true, 'real-project-runner source-template 模式应通过');
+  assert(result.scenarios.length === 3, 'real-project-runner 应运行 3 个 smoke 场景');
+  for (const item of result.scenarios) {
+    assert(item.ok === true, `场景 ${item.scenario} 应通过`);
+    assert(item.workspace.startsWith(result.root), `场景 ${item.scenario} 应使用 runner 自己的 workspace`);
+    assert(item.featureDir.startsWith(result.root), `场景 ${item.scenario} feature 应位于 runner root`);
+  }
+}
+
 function writeRichRequirements(baseDir, overrides = {}) {
   const requirements = {
     impactedBaseIds: ['client', 'backend', 'middle'],
@@ -2224,6 +2242,7 @@ const tests = [
   ['跨端契约校验', testContractsValidator],
   ['跨端契约 cwd 路径解析', testContractsValidatorCwd],
   ['Base Bootstrap ready/partial 判断', testBaseBootstrapReadyAndPartial],
+  ['Real Project Runner source-template', testRealProjectRunnerSourceTemplate],
   ['未知 Agent Adapter 拒绝', testUnknownAgentAdapter],
   ['未知 Checks Mode 拒绝', testUnknownChecksMode],
   ['Run Loop 未知参数拒绝', testRunLoopRejectsUnknownArg],
