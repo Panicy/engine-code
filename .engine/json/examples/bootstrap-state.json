@@ -1,0 +1,69 @@
+{
+  "schemaVersion": "0.1.0",
+  "projectId": "sample-project",
+  "baseId": "backend",
+  "templateId": "backend-starter",
+  "state": "ready",
+  "checkedAt": "2026-05-23T00:00:00.000Z",
+  "environment": {
+    "database": {
+      "type": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "database": "sample_app",
+      "username": "root",
+      "passwordSource": "local-env"
+    },
+    "redis": {
+      "host": "127.0.0.1",
+      "port": 6379,
+      "username": "default",
+      "passwordSource": "local-env"
+    }
+  },
+  "baseline": {
+    "databaseExists": true,
+    "importedScripts": [
+      "script/sql/ry_vue_5.X.sql"
+    ],
+    "skippedScripts": [
+      "script/sql/ry_job.sql",
+      "script/sql/ry_workflow.sql"
+    ],
+    "coreTables": [
+      { "name": "sys_user", "exists": true },
+      { "name": "sys_role", "exists": true },
+      { "name": "sys_menu", "exists": true },
+      { "name": "sys_config", "exists": true },
+      { "name": "sys_dict_type", "exists": true },
+      { "name": "sys_dict_data", "exists": true },
+      { "name": "sys_client", "exists": true }
+    ],
+    "coreData": [
+      { "id": "admin-user", "name": "默认管理员用户", "exists": true },
+      { "id": "system-menu", "name": "系统管理菜单", "exists": true },
+      { "id": "common-status-dict", "name": "通用状态字典", "exists": true }
+    ]
+  },
+  "checks": [
+    {
+      "id": "mysql-connection",
+      "type": "command",
+      "status": "passed",
+      "summary": "MySQL 连接成功。"
+    },
+    {
+      "id": "redis-ping",
+      "type": "command",
+      "status": "passed",
+      "summary": "Redis PING 成功。"
+    }
+  ],
+  "issues": [],
+  "humanConfirmation": {
+    "required": false,
+    "confirmedBy": "",
+    "confirmedAt": "",
+    "reason": ""
+  }
+}

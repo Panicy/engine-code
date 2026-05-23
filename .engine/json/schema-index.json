@@ -29,6 +29,11 @@
       "description": "按用户故事组织的任务拆分。"
     },
     {
+      "id": "bootstrap-state",
+      "path": "schemas/bootstrap-state.schema.json",
+      "description": "项目子基座初始化状态，记录数据库、Redis、基础表和默认数据是否就绪。"
+    },
+    {
       "id": "skills",
       "path": "schemas/skills.schema.json",
       "description": "模板或项目级 skill 注册表。"

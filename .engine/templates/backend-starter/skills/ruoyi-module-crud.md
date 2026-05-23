@@ -22,9 +22,10 @@
 1. `backend-starter/README.md`：确认模块边界、启动方式和默认裁剪范围。
 2. `backend-starter/docs/database-conventions.md`：确认审计字段、菜单权限、字典和 SQL 约定。
 3. `backend-starter/docs/api-connectivity-testing.md`：确认新增接口后的连通性测试方式。
-4. `SysConfigController.java`：Controller、权限、日志、返回结构模式。
-5. `SysConfigServiceImpl.java`：分页查询、唯一性校验、缓存和业务逻辑放置方式。
-6. `SysConfigMapper.xml`：字段映射和自定义 SQL 写法。
+4. `bootstrap-state.json`：确认基座数据库和 Redis 已初始化。
+5. `SysConfigController.java`：Controller、权限、日志、返回结构模式。
+6. `SysConfigServiceImpl.java`：分页查询、唯一性校验、缓存和业务逻辑放置方式。
+7. `SysConfigMapper.xml`：字段映射和自定义 SQL 写法。
 
 参考路径：
 
@@ -52,17 +53,19 @@ ruoyi-modules/ruoyi-system/src/main/java/org/dromara/system/service/impl/SysConf
 ## 实现步骤
 
 1. 确认实体名、表名、模块包名、接口前缀、权限标识、菜单归属。
-2. 检查基础 SQL 或项目数据库快照，确认表和字段不冲突。
-3. 新增或修改 `domain`、`domain/bo`、`domain/vo`。
-4. 新增或修改 `mapper` 接口和 `resources/mapper/**/*.xml`。
-5. 新增或修改 `service` 接口和 `service/impl` 实现。
-6. 新增 Controller，列表、详情、新增、修改、删除、导出按本地惯例实现。
-7. 补充业务表 SQL、菜单 SQL、按钮权限 SQL，必要时补充字典。
-8. 建议同步记录 API 契约、权限清单和接口连通性测试结果，方便中台/客户端继续接入。
+2. 检查 `bootstrap-state.json`；若基座未初始化，先停止并提示需要 `ruoyi-base-bootstrap`。
+3. 检查基础 SQL 或项目数据库快照，确认表和字段不冲突。
+4. 新增或修改 `domain`、`domain/bo`、`domain/vo`。
+5. 新增或修改 `mapper` 接口和 `resources/mapper/**/*.xml`。
+6. 新增或修改 `service` 接口和 `service/impl` 实现。
+7. 新增 Controller，列表、详情、新增、修改、删除、导出按本地惯例实现。
+8. 补充业务表 SQL、菜单 SQL、按钮权限 SQL，必要时补充字典。
+9. 同步记录 API 契约、权限清单和接口连通性测试结果，方便中台/客户端继续接入。
 
 ## 不要做
 
 - 不要修改 starter 基础 SQL 来塞业务表。
+- 不要在 CRUD 任务里导入后台基础库；基座未 ready 时先走 `ruoyi-base-bootstrap`。
 - 不要依赖 `test_demo` 或 `test_tree` 作为正式业务模型。
 - 不要为了测试永久添加 `@SaIgnore`、扩大 `security.excludes` 或移除 `@SaCheckPermission`。
 - 不要把数据库、Redis、OSS 密码写入模板或通用 SQL。
@@ -75,10 +78,12 @@ ruoyi-modules/ruoyi-system/src/main/java/org/dromara/system/service/impl/SysConf
 - `@SaCheckPermission` 权限码要和 `sys_menu.perms`、中台 `v-access:code` 一致。
 - 后端返回字段要和中台 TypeScript 类型、客户端展示字段对齐。
 - 分页接口要和中台 `pageNum/pageSize` 查询参数对齐。
+- `backend-api.json` 和 `permission-manifest.json` 是中台、客户端继续开发的输入，不要省略。
 
 ## 自查清单
 
 - SQL、Entity、Bo、Vo、Mapper、XML 字段一致。
+- 基座初始化状态为 `ready`，或已明确标记需要先初始化。
 - Controller 权限完整，权限码符合 `<domain>:<resource>:<action>`。
 - 列表接口分页参数和返回结构正确。
 - 正确接口路径不返回 404，错误路径返回 404 或框架约定错误。
@@ -92,3 +97,4 @@ ruoyi-modules/ruoyi-system/src/main/java/org/dromara/system/service/impl/SysConf
 - 需要引入新依赖、新中间件或 job/workflow。
 - 需要破坏性修改已有接口。
 - 需要临时关闭鉴权但项目没有明确测试方式。
+- 基座数据库没有初始化。

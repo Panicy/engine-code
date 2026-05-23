@@ -17,6 +17,7 @@
 ```text
 workspace.json
   -> project.json
+    -> bootstrap-state.json
     -> feature/prd.json
     -> feature/task-plan.json
       -> run-state.json
@@ -52,3 +53,4 @@ database-changes.json
 - skill 只提供实现知识，不承载执行契约。
 - 测试意识写入开发 skill 的自查清单。
 - `needs_human` 表示停止猜测，不阻塞其他任务。
+- `bootstrap-state.json` 记录子基座是否已初始化；功能任务只处理业务增量，不负责导入后台基础库。

@@ -6,6 +6,8 @@
 
 Skill 不是流程控制器、状态机或执行契约。执行调度、状态迁移、强制产物校验属于 task-plan、orchestrator 或运行期产物，不属于 skill。
 
+基座初始化也不是普通功能开发。后台数据库、Redis、基础系统表、默认用户角色菜单等前置条件应由 `setup` 类型 skill 或后续 Base Bootstrap 工具处理；功能 skill 只负责用户故事里的业务增量。
+
 ## 目录约定
 
 ```text
@@ -124,6 +126,7 @@ Planner Split Rules
 - 用户故事级验收。
 - 跨端回归审查。
 - 专门的测试证据 audit。
+- 后台接口连通性、菜单权限、401/403/404 和鉴权恢复。
 
 不建议：
 
@@ -135,9 +138,11 @@ Planner Split Rules
 
 后端：
 
+- `ruoyi-base-bootstrap`
 - `ruoyi-module-crud`
 - `ruoyi-api-change`
 - `ruoyi-database-migration`
+- `ruoyi-api-connectivity-test`
 
 中台：
 

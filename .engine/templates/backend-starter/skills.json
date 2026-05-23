@@ -3,6 +3,32 @@
   "registryId": "backend-starter",
   "skills": [
     {
+      "id": "ruoyi-base-bootstrap",
+      "templateId": "backend-starter",
+      "name": "RuoYi 基座初始化",
+      "description": "初始化或校验 RuoYi 后台基座运行所需的 MySQL、Redis、基础系统表和默认数据。",
+      "appliesTo": {
+        "taskTypes": ["setup"],
+        "paths": ["script/sql/**", "ruoyi-admin/src/main/resources/**", "starter.yaml"]
+      },
+      "inputsRequired": ["project.json", "template README", "database baseline", "local datasource/redis settings", "script/sql/ry_vue_5.X.sql"],
+      "workflow": [
+        { "step": 1, "instruction": "确认目标数据库、Redis、运行 profile 和是否允许导入基础 SQL。" },
+        { "step": 2, "instruction": "检查数据库是否存在；不存在时创建，存在时检测核心系统表是否完整。" },
+        { "step": 3, "instruction": "仅在核心系统表缺失或人工确认允许时导入 ry_vue_5.X.sql，默认不导入 job/workflow SQL。" },
+        { "step": 4, "instruction": "校验 sys_user、sys_role、sys_menu、sys_config、sys_dict_type、sys_client 等基础数据。" },
+        { "step": 5, "instruction": "校验 Redis 连通性和后端 datasource/redis 配置引用，不把密码写入通用模板。" },
+        { "step": 6, "instruction": "产出 bootstrap-state.json，记录数据库、Redis、基础表、导入脚本和人工确认信息。" }
+      ],
+      "qualityGates": [
+        { "name": "基础表", "expectation": "sys_user、sys_menu、sys_role、sys_config、sys_dict_type、sys_client 等核心表存在且可查询。" },
+        { "name": "幂等", "expectation": "重复执行校验不会重复插入菜单、角色、用户或覆盖已有业务数据。" },
+        { "name": "边界", "expectation": "基座初始化不新增业务功能表，不修改功能代码。" },
+        { "name": "凭据", "expectation": "数据库和 Redis 密码只来自本地配置或运行参数，不写入模板、skill 或通用 SQL。" }
+      ],
+      "promptAddendum": "详细手册见 skills/ruoyi-base-bootstrap.md。"
+    },
+    {
       "id": "ruoyi-module-crud",
       "templateId": "backend-starter",
       "name": "RuoYi 模块 CRUD",
@@ -59,8 +85,8 @@
       "name": "RuoYi 数据库迁移",
       "description": "新增或调整业务表、字段、索引、菜单权限初始化 SQL。",
       "appliesTo": {
-        "taskTypes": ["schema", "backend"],
-        "paths": ["script/sql/**", "ruoyi-modules/**"]
+        "taskTypes": ["schema"],
+        "paths": ["script/sql/**"]
       },
       "inputsRequired": ["field list", "entity model", "menu/permission requirements", "database conventions", "database baseline"],
       "workflow": [
@@ -75,6 +101,32 @@
         { "name": "可回放", "expectation": "SQL 文件可作为项目初始化或增量脚本执行。" }
       ],
       "promptAddendum": "详细手册见 skills/ruoyi-database-migration.md。"
+    },
+    {
+      "id": "ruoyi-api-connectivity-test",
+      "templateId": "backend-starter",
+      "name": "RuoYi 接口连通性测试",
+      "description": "对新增或变更后的后台接口、菜单权限、401/403/404 边界和鉴权恢复进行验证。",
+      "appliesTo": {
+        "taskTypes": ["test", "integration"],
+        "paths": ["ruoyi-admin/**", "ruoyi-modules/**", "script/sql/**", "engine-contracts/**"]
+      },
+      "inputsRequired": ["backend-api contract", "permission-manifest", "api connectivity testing guide", "local backend base url", "test credentials or auth strategy"],
+      "workflow": [
+        { "step": 1, "instruction": "读取 backend-api.json 和 permission-manifest.json，确认要测的路径、方法和权限码。" },
+        { "step": 2, "instruction": "先测错误路径，确认不存在的接口返回 404 或框架约定错误。" },
+        { "step": 3, "instruction": "在未登录状态访问受保护接口，确认返回 401/403 或框架未授权响应。" },
+        { "step": 4, "instruction": "在合法鉴权下访问接口，确认路径、参数、响应结构和菜单权限数据可用。" },
+        { "step": 5, "instruction": "如果临时关闭鉴权，只能作为测试手段；测试通过后必须恢复并确认 diff 中无放行残留。" },
+        { "step": 6, "instruction": "记录命令、响应摘要、异常状态和后续建议，供 Review Runner 或人工复核。" }
+      ],
+      "qualityGates": [
+        { "name": "404", "expectation": "正确接口路径不返回 404，错误路径可以稳定暴露 404 或框架约定错误。" },
+        { "name": "鉴权", "expectation": "未登录和无权限访问不能被误判为接口成功。" },
+        { "name": "菜单权限", "expectation": "新增菜单和按钮权限能从 sys_menu 查询到，权限码与契约一致。" },
+        { "name": "恢复", "expectation": "测试中临时鉴权变更必须恢复，最终代码不扩大匿名访问面。" }
+      ],
+      "promptAddendum": "详细手册见 skills/ruoyi-api-connectivity-test.md。"
     }
   ]
 }

@@ -117,6 +117,11 @@ function validateJsonFixtures() {
   const dirs = ['schemas', '.engine/json', '.engine/templates'].map((item) => path.resolve(repoRoot, item));
   const files = dirs.flatMap(listJsonFiles);
   for (const file of files) readJson(file);
+  const schemaIndex = readJson(path.resolve(repoRoot, '.engine/json/schema-index.json'));
+  for (const schema of schemaIndex.schemas ?? []) {
+    const schemaPath = path.resolve(repoRoot, schema.path);
+    assert(fs.existsSync(schemaPath), `schema-index 引用的 schema 不存在：${schema.path}`);
+  }
   return `${files.length} 个 JSON 文件`;
 }
 
@@ -467,6 +472,24 @@ function testApprovalGate(baseDir) {
     '--force',
   ], { expectFailure: true });
   assert(result.stderr.includes('PRD 尚未人工确认'), '未确认 PRD 应阻止任务拆分');
+}
+
+function testSkillTaskTypeMismatch(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'skill-task-type-mismatch');
+  const taskPlan = readJson(paths.taskPlan);
+  const task = taskPlan.storyGroups[0].tasks[0];
+  task.type = 'backend';
+  task.requiredSkillId = 'ruoyi-database-migration';
+  writeJsonFile(paths.taskPlan, taskPlan);
+  const report = validateFiles({
+    project: paths.projectPath ?? projectPath,
+    prd: paths.prd,
+    'task-plan': paths.taskPlan,
+    'run-state': paths.runState,
+    'templates-dir': templatesDir,
+  });
+  assert(report.valid === false, 'task.type 与 skill.appliesTo.taskTypes 不匹配时应校验失败');
+  assert(report.errors.some((item) => item.code === 'TASK_SKILL_TYPE_MISMATCH'), '应返回 TASK_SKILL_TYPE_MISMATCH');
 }
 
 function writeRichRequirements(baseDir, overrides = {}) {
@@ -2097,6 +2120,7 @@ function testRecoveryCancelPreventsRunLoopExecution(baseDir) {
 const tests = [
   ['JSON 契约文件可解析', (_baseDir) => validateJsonFixtures()],
   ['PRD 人工确认门禁', testApprovalGate],
+  ['Skill task type 匹配校验', testSkillTaskTypeMismatch],
   ['PRD Builder requirements-file', testPrdBuilderRequirementsFile],
   ['Task Planner rich PRD dependencies', testTaskPlannerRichPrdDependencies],
   ['跨端契约校验', testContractsValidator],

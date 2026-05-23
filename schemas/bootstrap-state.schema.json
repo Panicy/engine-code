@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engin-code.local/schemas/bootstrap-state.schema.json",
+  "title": "Bootstrap State",
+  "description": "项目子基座初始化状态。用于记录数据库、Redis、基础表和默认数据是否已经就绪。",
+  "type": "object",
+  "required": ["schemaVersion", "projectId", "baseId", "templateId", "state", "checkedAt", "environment", "baseline", "checks", "issues", "humanConfirmation"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "契约版本。当前固定为 0.1.0。"
+    },
+    "projectId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "业务项目 ID。"
+    },
+    "baseId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "项目内子基座 ID。"
+    },
+    "templateId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "模板 ID。"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["draft", "ready", "failed", "needs_human"],
+      "description": "初始化状态。ready 表示后续功能任务可以依赖该基座。"
+    },
+    "checkedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "最后检查时间。"
+    },
+    "environment": {
+      "type": "object",
+      "required": ["database", "redis"],
+      "additionalProperties": false,
+      "properties": {
+        "database": {
+          "type": "object",
+          "required": ["type", "host", "port", "database", "username", "passwordSource"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "enum": ["mysql"], "description": "数据库类型。" },
+            "host": { "type": "string", "minLength": 1, "description": "数据库主机。" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "数据库端口。" },
+            "database": { "type": "string", "minLength": 1, "description": "数据库名。" },
+            "username": { "type": "string", "minLength": 1, "description": "数据库用户名。" },
+            "passwordSource": { "type": "string", "minLength": 1, "description": "密码来源说明，例如 local-env、keychain、runtime-arg。" }
+          }
+        },
+        "redis": {
+          "type": "object",
+          "required": ["host", "port", "username", "passwordSource"],
+          "additionalProperties": false,
+          "properties": {
+            "host": { "type": "string", "minLength": 1, "description": "Redis 主机。" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "Redis 端口。" },
+            "username": { "type": "string", "description": "Redis 用户名，可为空字符串。" },
+            "passwordSource": { "type": "string", "minLength": 1, "description": "密码来源说明。" }
+          }
+        }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": ["databaseExists", "importedScripts", "skippedScripts", "coreTables", "coreData"],
+      "additionalProperties": false,
+      "properties": {
+        "databaseExists": { "type": "boolean", "description": "目标数据库是否存在。" },
+        "importedScripts": { "type": "array", "items": { "type": "string" }, "description": "已导入的基础脚本。" },
+        "skippedScripts": { "type": "array", "items": { "type": "string" }, "description": "明确跳过的基础脚本。" },
+        "coreTables": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/existenceCheck" },
+          "description": "核心系统表检查结果。"
+        },
+        "coreData": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/existenceCheck" },
+          "description": "核心默认数据检查结果。"
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/checkResult" },
+      "description": "初始化检查结果。"
+    },
+    "issues": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/bootstrapIssue" },
+      "description": "初始化异常。"
+    },
+    "humanConfirmation": {
+      "type": "object",
+      "required": ["required", "confirmedBy", "confirmedAt", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean", "description": "是否需要人工确认。" },
+        "confirmedBy": { "type": "string", "description": "确认人，可为空字符串。" },
+        "confirmedAt": { "type": "string", "description": "确认时间，可为空字符串。" },
+        "reason": { "type": "string", "description": "需要或完成确认的原因。" }
+      }
+    }
+  },
+  "$defs": {
+    "existenceCheck": {
+      "type": "object",
+      "required": ["name", "exists"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "检查 ID，可选。" },
+        "name": { "type": "string", "minLength": 1, "description": "表名或数据名称。" },
+        "exists": { "type": "boolean", "description": "是否存在。" }
+      }
+    },
+    "checkResult": {
+      "type": "object",
+      "required": ["id", "type", "status", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "检查 ID。" },
+        "type": { "type": "string", "enum": ["command", "sql", "http", "manual"], "description": "检查类型。" },
+        "status": { "type": "string", "enum": ["passed", "failed", "skipped"], "description": "检查状态。" },
+        "summary": { "type": "string", "description": "检查摘要。" }
+      }
+    },
+    "bootstrapIssue": {
+      "type": "object",
+      "required": ["code", "message", "severity"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "minLength": 1, "description": "异常代码。" },
+        "message": { "type": "string", "minLength": 1, "description": "异常说明。" },
+        "severity": { "type": "string", "enum": ["warning", "error"], "description": "异常级别。" }
+      }
+    }
+  }
+}

@@ -386,8 +386,22 @@ function validateReferences(report, data, files, options) {
     }
 
     const registry = skillsByTemplate.get(base.templateId);
-    if (registry && !registry.skills.has(task.requiredSkillId)) {
+    const skill = registry?.skills.get(task.requiredSkillId);
+    if (registry && !skill) {
       addIssue(report, issue('error', 'TASK_SKILL_NOT_FOUND', files.taskPlan, `${task._path}.requiredSkillId`, `requiredSkillId=${task.requiredSkillId} 不存在于 ${base.templateId}/skills.json。`));
+    }
+    if (skill) {
+      const allowedTaskTypes = skill.appliesTo?.taskTypes ?? [];
+      if (!allowedTaskTypes.includes(task.type)) {
+        addIssue(report, issue(
+          'error',
+          'TASK_SKILL_TYPE_MISMATCH',
+          files.taskPlan,
+          `${task._path}.requiredSkillId`,
+          `任务 ${task.id} 的 type=${task.type} 不适用于 skill ${task.requiredSkillId}。`,
+          `允许的 taskTypes：${allowedTaskTypes.join(', ')}`
+        ));
+      }
     }
 
     for (const dependency of task.dependsOn ?? []) {

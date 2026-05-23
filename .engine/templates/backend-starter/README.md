@@ -71,10 +71,11 @@ script/sql/
 
 ## Skill
 
+- `ruoyi-base-bootstrap`：初始化或校验 MySQL、Redis、基础系统表和默认数据。
 - `ruoyi-module-crud`：新增或扩展基础 CRUD 模块。
 - `ruoyi-api-change`：调整已有接口或服务逻辑。
-- `ruoyi-database-migration`：新增业务表、字段、菜单权限 SQL。
-- `ruoyi-permission-menu`：补齐权限标识和菜单数据。
+- `ruoyi-database-migration`：新增业务表、字段、菜单权限等业务增量 SQL。
+- `ruoyi-api-connectivity-test`：验证接口 401/403/404、菜单权限和鉴权恢复。
 
 ## 数据库文档
 
