@@ -15,6 +15,15 @@ node tools/contracts/validate-contracts.mjs \
   --permissions .engine/json/examples/permission-manifest.json
 ```
 
+当命令在业务基座目录里运行，且契约文件路径希望按该目录解析时，传入 `--cwd`：
+
+```bash
+node /path/to/engine/tools/contracts/validate-contracts.mjs \
+  --cwd /path/to/backend-workspace \
+  --backend-api engine-contracts/notice-tags/backend-api.json \
+  --permissions engine-contracts/notice-tags/permission-manifest.json
+```
+
 校验内容：
 
 - `backend-api.json` 符合 `schemas/backend-api.schema.json`。

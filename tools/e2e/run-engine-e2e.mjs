@@ -449,6 +449,23 @@ function testContractsValidator(baseDir) {
   assert(readFailedReport.errors.some((item) => item.code === 'CONTRACTS_READ_FAILED'), 'JSON 读取失败应返回 CONTRACTS_READ_FAILED');
 }
 
+function testContractsValidatorCwd(baseDir) {
+  const workspace = path.join(baseDir, 'contracts-cwd-workspace');
+  const contractsDir = path.join(workspace, 'engine-contracts/notice-tags');
+  fs.mkdirSync(contractsDir, { recursive: true });
+  writeJsonFile(path.join(contractsDir, 'backend-api.json'), backendApiFixture());
+  writeJsonFile(path.join(contractsDir, 'permission-manifest.json'), permissionManifestFixture());
+  const result = runNode([
+    'tools/contracts/validate-contracts.mjs',
+    '--cwd', workspace,
+    '--backend-api', 'engine-contracts/notice-tags/backend-api.json',
+    '--permissions', 'engine-contracts/notice-tags/permission-manifest.json',
+  ]);
+  const report = parseCommandJson(result);
+  assert(report.valid === true, 'validate-contracts --cwd 应按 workspace 解析相对路径');
+  assert(report.files.backendApi === path.join(contractsDir, 'backend-api.json'), 'backend-api 文件路径应解析到 workspace 内');
+}
+
 function prepareApprovedFeature(baseDir, featureId, options = {}) {
   if (!options.projectPath) {
     options.projectPath = writeProjectWithWorkspace(baseDir, `${featureId}-project.json`, options.workspace ?? '.');
@@ -490,6 +507,87 @@ function testSkillTaskTypeMismatch(baseDir) {
   });
   assert(report.valid === false, 'task.type 与 skill.appliesTo.taskTypes 不匹配时应校验失败');
   assert(report.errors.some((item) => item.code === 'TASK_SKILL_TYPE_MISMATCH'), '应返回 TASK_SKILL_TYPE_MISMATCH');
+}
+
+function writeFakeMysql(baseDir, mode) {
+  const scriptPath = path.join(baseDir, `fake-mysql-${mode}.mjs`);
+  fs.writeFileSync(scriptPath, `#!/usr/bin/env node
+const mode = ${JSON.stringify(mode)};
+const sqlIndex = process.argv.indexOf('-e');
+const sql = sqlIndex >= 0 ? process.argv[sqlIndex + 1] : '';
+const tables = {
+  ready: ['sys_client','sys_config','sys_dept','sys_dict_data','sys_dict_type','sys_menu','sys_role','sys_role_menu','sys_user','sys_user_role'],
+  partial: ['sys_menu','sys_role','sys_user'],
+  empty: []
+};
+if (sql.includes('information_schema.SCHEMATA')) {
+  console.log('aitest');
+  process.exit(0);
+}
+if (sql.includes('information_schema.TABLES')) {
+  for (const table of tables[mode] || []) console.log(table);
+  process.exit(0);
+}
+if (sql.startsWith('CREATE DATABASE')) process.exit(0);
+process.exit(0);
+`, 'utf8');
+  fs.chmodSync(scriptPath, 0o755);
+  return scriptPath;
+}
+
+function writeFakeRedis(baseDir) {
+  const scriptPath = path.join(baseDir, 'fake-redis-cli.mjs');
+  fs.writeFileSync(scriptPath, `#!/usr/bin/env node
+console.log('PONG');
+`, 'utf8');
+  fs.chmodSync(scriptPath, 0o755);
+  return scriptPath;
+}
+
+function createBackendBootstrapWorkspace(baseDir) {
+  const workspace = path.join(baseDir, `bootstrap-workspace-${Date.now()}`);
+  fs.mkdirSync(path.join(workspace, 'script/sql'), { recursive: true });
+  fs.writeFileSync(path.join(workspace, 'script/sql/ry_vue_5.X.sql'), '-- baseline sql\n', 'utf8');
+  return workspace;
+}
+
+function testBaseBootstrapReadyAndPartial(baseDir) {
+  const redisCommand = writeFakeRedis(baseDir);
+  const readyWorkspace = createBackendBootstrapWorkspace(baseDir);
+  const readyOut = path.join(baseDir, 'bootstrap-ready.json');
+  const ready = runNode([
+    'tools/base-bootstrap/bootstrap-backend.mjs',
+    '--project-id', 'bootstrap-e2e',
+    '--base-id', 'backend',
+    '--workspace', readyWorkspace,
+    '--database', 'aitest',
+    '--out', readyOut,
+    '--mysql-command', writeFakeMysql(baseDir, 'ready'),
+    '--redis-command', redisCommand,
+    '--redis-url', 'redis://default:redacted@127.0.0.1:6379',
+  ]);
+  const readyReport = parseCommandJson(ready);
+  assert(readyReport.ok === true, '完整基座应 ready');
+  assert(readJson(readyOut).state === 'ready', '完整基座输出 state=ready');
+
+  const partialWorkspace = createBackendBootstrapWorkspace(baseDir);
+  const partialOut = path.join(baseDir, 'bootstrap-partial.json');
+  const partial = runNode([
+    'tools/base-bootstrap/bootstrap-backend.mjs',
+    '--project-id', 'bootstrap-e2e',
+    '--base-id', 'backend',
+    '--workspace', partialWorkspace,
+    '--database', 'aitest',
+    '--out', partialOut,
+    '--mysql-command', writeFakeMysql(baseDir, 'partial'),
+    '--redis-command', redisCommand,
+    '--redis-url', 'redis://default:redacted@127.0.0.1:6379',
+  ], { expectFailure: true });
+  const partialReport = parseCommandJson(partial);
+  assert(partialReport.ok === false, '残缺基座应失败并需要人工处理');
+  const partialState = readJson(partialOut);
+  assert(partialState.state === 'needs_human', '残缺基座输出 state=needs_human');
+  assert(partialState.issues.some((item) => item.code === 'BASELINE_PARTIAL'), '残缺基座应记录 BASELINE_PARTIAL');
 }
 
 function writeRichRequirements(baseDir, overrides = {}) {
@@ -2124,6 +2222,8 @@ const tests = [
   ['PRD Builder requirements-file', testPrdBuilderRequirementsFile],
   ['Task Planner rich PRD dependencies', testTaskPlannerRichPrdDependencies],
   ['跨端契约校验', testContractsValidator],
+  ['跨端契约 cwd 路径解析', testContractsValidatorCwd],
+  ['Base Bootstrap ready/partial 判断', testBaseBootstrapReadyAndPartial],
   ['未知 Agent Adapter 拒绝', testUnknownAgentAdapter],
   ['未知 Checks Mode 拒绝', testUnknownChecksMode],
   ['Run Loop 未知参数拒绝', testRunLoopRejectsUnknownArg],

@@ -13,6 +13,9 @@ function usage() {
     '用法：node tools/contracts/validate-contracts.mjs \\',
     '  --backend-api <backend-api.json> \\',
     '  --permissions <permission-manifest.json>',
+    '',
+    '可选：',
+    '  --cwd <path>  相对路径解析根目录，默认是引擎仓库根目录。',
   ].join('\n');
 }
 
@@ -26,7 +29,7 @@ function parseArgs(argv) {
     }
     if (!arg.startsWith('--')) throw new Error(`未知参数：${arg}`);
     const key = arg.slice(2);
-    if (!['backend-api', 'permissions'].includes(key)) throw new Error(`未知参数：${arg}`);
+    if (!['backend-api', 'permissions', 'cwd'].includes(key)) throw new Error(`未知参数：${arg}`);
     const value = argv[i + 1];
     if (!value || value.startsWith('--')) throw new Error(`参数 ${arg} 缺少值`);
     args[key] = value;
@@ -35,8 +38,12 @@ function parseArgs(argv) {
   return args;
 }
 
-function readJson(filePath) {
-  const abs = path.resolve(repoRoot, filePath);
+function resolveInputPath(filePath, cwd = repoRoot) {
+  return path.resolve(cwd, filePath);
+}
+
+function readJson(filePath, cwd = repoRoot) {
+  const abs = resolveInputPath(filePath, cwd);
   return {
     path: abs,
     value: JSON.parse(fs.readFileSync(abs, 'utf8')),
@@ -127,9 +134,10 @@ function validateContracts(input) {
   const permissionsFile = input.permissions;
   if (!backendApiFile) throw new Error('缺少必填参数 --backend-api');
   if (!permissionsFile) throw new Error('缺少必填参数 --permissions');
+  const cwd = input.cwd ? path.resolve(repoRoot, input.cwd) : repoRoot;
 
-  const backendApi = readJson(backendApiFile);
-  const permissions = readJson(permissionsFile);
+  const backendApi = readJson(backendApiFile, cwd);
+  const permissions = readJson(permissionsFile, cwd);
   const files = {
     backendApi: backendApi.path,
     permissions: permissions.path,
@@ -186,4 +194,4 @@ if (process.argv[1] && __filename === path.resolve(process.argv[1])) {
   main();
 }
 
-export { validateContracts };
+export { validateContracts, resolveInputPath };
