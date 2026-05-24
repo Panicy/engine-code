@@ -95,6 +95,12 @@
       },
       "default": {}
     },
+    "taskPreflightCommands": {
+      "type": "array",
+      "description": "进入该模板 task 的开发 Agent 前必须通过的轻量检查。用于发现依赖未安装等会导致 Agent 长时间卡住的问题；失败时 task 进入 needs_human。",
+      "items": { "$ref": "#/$defs/runtimeCommand" },
+      "default": []
+    },
     "pathPolicy": {
       "type": "object",
       "required": ["defaultAllowedPaths"],

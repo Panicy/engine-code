@@ -66,6 +66,14 @@
       }
     ]
   },
+  "taskPreflightCommands": [
+    {
+      "id": "middle-dependencies-installed",
+      "command": "test -d node_modules && test -x node_modules/.bin/vue-tsc",
+      "required": true,
+      "description": "确认中台依赖已安装，避免 Codex 在 task 内执行 typecheck 时因 vue-tsc/node_modules 缺失长时间超时。失败时先在 bases/middle 执行 pnpm install。"
+    }
+  ],
   "pathPolicy": {
     "defaultAllowedPaths": [
       "apps/web-antd/src/api/**",

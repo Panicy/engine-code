@@ -70,6 +70,8 @@ function summarizeTaskRun(taskRun) {
       })),
       lastIssue: attempt.lastIssue ?? null,
       summary: attempt.summary ?? '',
+      errors: attempt.errors ?? [],
+      nextActions: attempt.nextActions ?? [],
     })),
   };
 }

@@ -2081,6 +2081,10 @@ if (mode === 'write-allowed') {
   fs.mkdirSync('src/pages/notice', { recursive: true });
   fs.writeFileSync('src/pages/notice/index.vue', 'after\\\\n');
 }
+if (mode === 'write-middle-allowed') {
+  fs.mkdirSync('apps/web-antd/src/views/system/preflight', { recursive: true });
+  fs.writeFileSync('apps/web-antd/src/views/system/preflight/index.vue', 'after\\\\n');
+}
 if (mode === 'write-out-of-scope') {
   fs.mkdirSync('src/pages/user', { recursive: true });
   fs.writeFileSync('src/pages/user/index.vue', 'after\\\\n');
@@ -2429,6 +2433,52 @@ function testShellAdapterMissingCommand(baseDir) {
   assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), 'shell adapter 缺少命令时任务应 needsHuman');
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   assert(taskRun.attempts[0].errors.includes('缺少 --shell-command'), 'task-run 应记录缺少命令错误');
+}
+
+function testMiddleTaskPreflightMissingDependencies(baseDir) {
+  const fakeAgent = writeFakeCodex(baseDir);
+  const workspace = path.join(baseDir, 'middle-preflight-missing-deps-workspace');
+  initGitWorkspace(workspace, { 'README.md': 'middle workspace\n' });
+  const localProjectPath = writeProjectWithWorkspace(baseDir, 'middle-preflight-missing-deps-project.json', workspace);
+  const paths = prepareApprovedFeature(baseDir, 'middle-preflight-missing-deps', { projectPath: localProjectPath, bases: 'middle' });
+  const result = runLoop(paths, [
+    '--agent-adapter', 'external',
+    '--external-agent-command', fakeAgent,
+    '--external-agent-extra-arg', 'exec',
+    '--external-agent-extra-arg', '--fake-mode',
+    '--external-agent-extra-arg', 'write-middle-allowed',
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), '中台依赖缺失时应在 task preflight 进入 needs_human');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].agent.tool === 'run-loop', 'task preflight 失败时不应调用业务 agent');
+  assert(taskRun.attempts[0].checks.some((check) => check.id === 'middle-dependencies-installed' && check.status === 'failed'), 'task-run 应记录依赖 preflight 失败');
+  assert(taskRun.attempts[0].nextActions.some((item) => item.includes('pnpm install')), '依赖缺失应提示 pnpm install');
+  assert(!fs.existsSync(path.join(workspace, 'apps/web-antd/src/views/system/preflight/index.vue')), 'preflight 失败时 shell agent 不应执行');
+}
+
+function testMiddleTaskPreflightPassesAfterDependencies(baseDir) {
+  const fakeAgent = writeFakeCodex(baseDir);
+  const workspace = path.join(baseDir, 'middle-preflight-ready-workspace');
+  initGitWorkspace(workspace, { 'README.md': 'middle workspace\n' });
+  const vueTscPath = path.join(workspace, 'node_modules/.bin/vue-tsc');
+  fs.mkdirSync(path.dirname(vueTscPath), { recursive: true });
+  fs.writeFileSync(vueTscPath, '#!/usr/bin/env sh\nexit 0\n', 'utf8');
+  fs.chmodSync(vueTscPath, 0o755);
+  runCommand('git', ['add', 'node_modules/.bin/vue-tsc'], { cwd: workspace });
+  runCommand('git', ['commit', '-m', 'add fake middle deps'], { cwd: workspace });
+  const localProjectPath = writeProjectWithWorkspace(baseDir, 'middle-preflight-ready-project.json', workspace);
+  const paths = prepareApprovedFeature(baseDir, 'middle-preflight-ready', { projectPath: localProjectPath, bases: 'middle' });
+  const result = runLoop(paths, [
+    '--agent-adapter', 'external',
+    '--external-agent-command', fakeAgent,
+    '--external-agent-extra-arg', 'exec',
+    '--external-agent-extra-arg', '--fake-mode',
+    '--external-agent-extra-arg', 'write-middle-allowed',
+    '--max-tasks', '1',
+  ]);
+  assert(result.summary.taskSummary.done.includes('TASK-001'), '中台依赖 ready 后应继续调用 agent 并完成任务');
+  assert(firstAttemptChangedFiles(paths).includes('apps/web-antd/src/views/system/preflight/index.vue'), 'preflight 通过后应记录真实中台改动');
 }
 
 function testReviewFailureRetry(baseDir) {
@@ -2802,6 +2852,8 @@ const tests = [
   ['Run Loop shell 修改越界路径失败', testRunLoopOutOfScopeShellFail],
   ['Run Loop 真实检查使用基座目录', testRealChecksUseBaseWorkspace],
   ['Shell Adapter 缺少命令', testShellAdapterMissingCommand],
+  ['Middle task preflight 依赖缺失', testMiddleTaskPreflightMissingDependencies],
+  ['Middle task preflight 依赖 ready', testMiddleTaskPreflightPassesAfterDependencies],
   ['评审失败复跑入口', testReviewFailureRetry],
   ['needs_human 非阻塞状态', testNeedsHuman],
   ['Recovery list-issues 正常', testRecoveryListIssues],

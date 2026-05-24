@@ -95,6 +95,8 @@ function buildTaskContext({ project, prd, taskPlan, taskId, templatesDir = '.eng
       templatePath,
       defaultAllowedPaths: template.pathPolicy?.defaultAllowedPaths ?? [],
       defaultChecks: template.defaultChecks ?? [],
+      taskPreflightCommands: template.taskPreflightCommands ?? [],
+      installCommands: template.workspaceDefaults?.installCommands ?? [],
     },
     prd: prdSliceForTask(prd, task),
     task,

@@ -399,6 +399,56 @@ function validateAdapterOutcome(outcome, adapterId) {
   }
 }
 
+function outputSummary(result, limit = 1000) {
+  const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+  return output ? output.slice(0, limit) : `exit ${result.status ?? 'unknown'}`;
+}
+
+function runTaskPreflight(taskContext, timeoutMs = 60000) {
+  const commands = taskContext.template.taskPreflightCommands ?? [];
+  const checks = [];
+  for (const item of commands) {
+    const result = spawnSync(item.command, {
+      cwd: taskContext.base.workspaceAbs,
+      shell: true,
+      encoding: 'utf8',
+      timeout: timeoutMs,
+      maxBuffer: 1024 * 1024,
+    });
+    const failed = Boolean(result.error) || result.status !== 0;
+    checks.push({
+      id: item.id,
+      command: item.command,
+      status: failed ? 'failed' : 'passed',
+      summary: failed
+        ? `${item.description ?? 'task preflight failed'}\n${result.error ? result.error.message : outputSummary(result)}`
+        : item.description ?? `task preflight passed: ${item.command}`,
+    });
+  }
+  const failedChecks = checks.filter((check) => check.status === 'failed');
+  if (failedChecks.length === 0) return { passed: true, checks };
+  const installCommands = taskContext.template.installCommands ?? [];
+  return {
+    passed: false,
+    checks,
+    outcome: {
+      requestedStatus: 'needs_human',
+      taskRunStatus: 'needs_human',
+      reviewVerdict: null,
+      source: 'orchestrator',
+      agent: { tool: 'run-loop', model: 'task-preflight' },
+      changedFiles: [],
+      checks,
+      summary: `task preflight failed: ${failedChecks.map((check) => check.id).join(', ')}`,
+      logs: [],
+      errors: failedChecks.map((check) => check.summary),
+      nextActions: installCommands.length > 0
+        ? installCommands.map((command) => `在 ${taskContext.base.workspaceAbs} 执行：${command}`)
+        : ['修复模板 taskPreflightCommands 报告的问题后重跑。'],
+    },
+  };
+}
+
 function recordOutcomeArtifacts(runState, outcome) {
   for (const log of outcome.logs ?? []) {
     if (!log?.path) continue;
@@ -649,6 +699,52 @@ async function runLoop(args) {
         writeJsonAtomic(taskContextPath, taskContext);
         if (!runState.artifacts.some((artifact) => artifact.type === 'taskContext' && artifact.path === taskContextPath)) {
           runState.artifacts.push({ type: 'taskContext', path: taskContextPath });
+        }
+
+        if (['codex', 'external'].includes(adapter.id)) {
+          const preflight = runTaskPreflight(taskContext);
+          if (!preflight.passed) {
+            const finishedTaskAt = nowIso();
+            const desiredStatus = 'needs_human';
+            const lastIssue = {
+              type: 'task_preflight_failed',
+              summary: preflight.outcome.summary,
+              source: 'orchestrator',
+              requiredDecision: '请按 nextActions 准备基座依赖后恢复任务。',
+              createdAt: finishedTaskAt,
+            };
+            const taskRun = buildTaskRun({
+              runState,
+              task,
+              attempt: state.attempts,
+              status: desiredStatus,
+              startedAt: startedTaskAt,
+              finishedAt: finishedTaskAt,
+              lastIssue,
+              args,
+              taskContextPath,
+              taskContext,
+              changedFiles: [],
+              outcome: preflight.outcome,
+            });
+            const taskRunPath = artifactPath(featureDir, task.id, 'task-run.json');
+            const mergedTaskRun = mergeTaskRun(readJsonIfExists(taskRunPath), taskRun);
+            schemaValidateArtifact('task-run', mergedTaskRun, taskRunPath);
+            writeJsonAtomic(taskRunPath, mergedTaskRun);
+            if (!runState.artifacts.some((artifact) => artifact.type === 'taskRun' && artifact.path === taskRunPath)) {
+              runState.artifacts.push({ type: 'taskRun', path: taskRunPath });
+            }
+            state.status = desiredStatus;
+            state.lastIssue = lastIssue;
+            state.lastRunId = runState.runId;
+            state.updatedAt = finishedTaskAt;
+            runState.updatedAt = finishedTaskAt;
+            executedTaskIds.push(task.id);
+            executedThisLoop.add(task.id);
+            executed += 1;
+            writeJsonAtomic(args['run-state'], runState);
+            continue;
+          }
         }
 
         const beforeGitSnapshot = collectGitDiffSnapshot(taskContext.base.workspaceAbs);

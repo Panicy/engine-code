@@ -35,6 +35,8 @@ pnpm lint
 
 说明：`typecheck` 是全量中台检查，可能受既有基线错误影响；默认不作为每个 middle task 的阻塞检查。
 
+Run Loop 在调用 `codex` 或 `external` 这类进程型 Agent 开发中台 task 前，会先检查 `node_modules` 和 `node_modules/.bin/vue-tsc`。如果依赖未安装，task 会直接进入 `needs_human` 并提示先执行 `pnpm install`，避免 Agent 在缺依赖环境里长时间超时。
+
 ## 关键目录
 
 ```text
