@@ -25,7 +25,7 @@ const defaultBases = {
 
 function usage() {
   return [
-    '用法：engine <command> [options]',
+    '用法：sk <command> [options]',
     '',
     'Commands:',
     '  init-project   创建 project.json',
@@ -39,12 +39,12 @@ function usage() {
     '  cancel         取消 needs_human task',
     '',
     'Examples:',
-    '  engine init-project --project-id demo --name 示例 --project-dir ../sk-projects/demo --backend /path/backend --middle /path/middle',
-    '  engine init-feature --project-dir ../sk-projects/demo --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
-    '  engine runtime --project-dir ../sk-projects/demo --feature-id app --mode mock',
-    '  engine run --project-dir ../sk-projects/demo --feature-id app --runtime-mode mock --checks-mode mock',
-    '  MYSQL_PWD=romantic. engine real-test --mysql-command /usr/local/mysql/bin/mysql --mysql-user root --mysql-password-env MYSQL_PWD --database aitest --redis-url redis://default:root123@127.0.0.1:6379',
-    '  engine status --project-dir ../sk-projects/demo --feature-id app',
+    '  sk init-project --project-id demo --name 示例 --project-dir ../sk-projects/demo --backend /path/backend --middle /path/middle',
+    '  sk init-feature --project-dir ../sk-projects/demo --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
+    '  sk runtime --project-dir ../sk-projects/demo --feature-id app --mode mock',
+    '  sk run --project-dir ../sk-projects/demo --feature-id app --runtime-mode mock --checks-mode mock',
+    '  MYSQL_PWD=romantic. sk real-test --mysql-command /usr/local/mysql/bin/mysql --mysql-user root --mysql-password-env MYSQL_PWD --database aitest --redis-url redis://default:root123@127.0.0.1:6379',
+    '  sk status --project-dir ../sk-projects/demo --feature-id app',
   ].join('\n');
 }
 

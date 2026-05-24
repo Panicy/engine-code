@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
+    "sk": "tools/cli/engine.mjs",
     "engine": "tools/cli/engine.mjs"
   },
   "scripts": {

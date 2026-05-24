@@ -12,7 +12,7 @@
 ## 常用命令
 
 ```bash
-node tools/cli/engine.mjs init-project \
+sk init-project \
   --project-id demo \
   --name 示例项目 \
   --project-dir ../sk-projects/demo \
@@ -24,7 +24,7 @@ node tools/cli/engine.mjs init-project \
 如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../sk-projects/<project-id>/project.json`。
 
 ```bash
-node tools/cli/engine.mjs init-feature \
+sk init-feature \
   --project-dir ../sk-projects/demo \
   --feature-id app-management \
   --name 应用管理 \
@@ -35,14 +35,14 @@ node tools/cli/engine.mjs init-feature \
 ```
 
 ```bash
-node tools/cli/engine.mjs runtime \
+sk runtime \
   --project-dir ../sk-projects/demo \
   --feature-id app-management \
   --mode check
 ```
 
 ```bash
-node tools/cli/engine.mjs run \
+sk run \
   --project-dir ../sk-projects/demo \
   --feature-id app-management \
   --agent-adapter shell \
@@ -52,7 +52,7 @@ node tools/cli/engine.mjs run \
 ```
 
 ```bash
-node tools/cli/engine.mjs status \
+sk status \
   --project-dir ../sk-projects/demo \
   --feature-id app-management
 ```
@@ -62,7 +62,7 @@ node tools/cli/engine.mjs status \
 `real-test` 会调用固定三端基座真实项目测试流程：拉取 backend / middle / client 固定基座，创建 `project.json`，执行后端 bootstrap，并跑真实需求 smoke 场景。
 
 ```bash
-MYSQL_PWD='romantic.' node tools/cli/engine.mjs real-test \
+MYSQL_PWD='romantic.' sk real-test \
   --mysql-command /usr/local/mysql/bin/mysql \
   --mysql-user root \
   --mysql-password-env MYSQL_PWD \
@@ -75,7 +75,7 @@ MYSQL_PWD='romantic.' node tools/cli/engine.mjs real-test \
 调试引擎本体时可以使用本地 source template，避免网络 clone 和数据库依赖：
 
 ```bash
-node tools/cli/engine.mjs real-test \
+sk real-test \
   --clone-mode source-template \
   --skip-bootstrap
 ```
@@ -85,13 +85,13 @@ node tools/cli/engine.mjs real-test \
 ## 任务恢复
 
 ```bash
-node tools/cli/engine.mjs show-task \
+sk show-task \
   --feature .engine/projects/demo/features/app-management \
   --task-id TASK-001
 ```
 
 ```bash
-node tools/cli/engine.mjs retry \
+sk retry \
   --feature .engine/projects/demo/features/app-management \
   --task-id TASK-001 \
   --by human \
@@ -99,7 +99,7 @@ node tools/cli/engine.mjs retry \
 ```
 
 ```bash
-node tools/cli/engine.mjs cancel \
+sk cancel \
   --feature .engine/projects/demo/features/app-management \
   --task-id TASK-001 \
   --by human \
