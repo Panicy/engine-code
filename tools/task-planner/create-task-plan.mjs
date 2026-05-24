@@ -37,6 +37,7 @@ function usage() {
     '  --run-state-out <run-state.json>',
     '  --templates-dir .engine/templates',
     '  --bases backend,middle,client',
+    '  --requirements-file <requirements.json>',
     '  --allow-draft-prd',
     '  --force',
   ].join('\n');
@@ -77,6 +78,15 @@ function requireArg(args, key) {
 function readJson(filePath) {
   const abs = path.resolve(repoRoot, filePath);
   return JSON.parse(fs.readFileSync(abs, 'utf8'));
+}
+
+function loadRequirements(args) {
+  if (!args['requirements-file']) return null;
+  const requirements = readJson(args['requirements-file']);
+  if (!requirements || typeof requirements !== 'object' || Array.isArray(requirements)) {
+    throw new Error('--requirements-file 必须是 JSON 对象');
+  }
+  return requirements;
 }
 
 function splitCsv(value) {
@@ -135,11 +145,65 @@ function allowedPathsForSkill(registry, skillId, template) {
   return template.pathPolicy?.defaultAllowedPaths ?? ['**'];
 }
 
-function checksForBase(template, baseId) {
+function checkIdSuffix(baseId, index) {
+  return `${baseId}-requirement-check-${String(index + 1).padStart(3, '0')}`;
+}
+
+function pruneUndefined(value) {
+  if (Array.isArray(value)) return value.map(pruneUndefined);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => item !== undefined)
+      .map(([key, item]) => [key, pruneUndefined(item)]),
+  );
+}
+
+function normalizeRequirementChecks(requirements, baseId) {
+  const checksByBase = requirements?.checksByBase ?? requirements?.taskChecks ?? {};
+  const explicitChecks = checksByBase[baseId] ?? [];
+  if (!Array.isArray(explicitChecks)) {
+    throw new Error(`requirements checksByBase.${baseId} 必须是数组`);
+  }
+  const backendApiChecks = baseId === 'backend' ? (requirements?.backendApiChecks ?? []) : [];
+  if (!Array.isArray(backendApiChecks)) {
+    throw new Error('requirements backendApiChecks 必须是数组');
+  }
+  const httpChecks = backendApiChecks.map((check, index) => pruneUndefined({
+    id: check.id ?? checkIdSuffix(baseId, index),
+    name: check.name ?? `后端接口检查 ${check.path ?? check.url}`,
+    type: 'http',
+    baseId,
+    http: {
+      method: check.method ?? 'GET',
+      url: check.url ?? `${check.baseUrl ?? 'http://127.0.0.1:8088'}${check.path}`,
+      headers: check.headers ?? {},
+      body: check.body,
+      expectedStatus: check.expectedStatus ?? 200,
+      authMode: check.authMode ?? 'default',
+      tokenEnv: check.tokenEnv,
+      authHeader: check.authHeader,
+      authScheme: check.authScheme,
+      environment: check.environment ?? 'dev',
+      expectedBody: check.expectedBody,
+      setupCommands: check.setupCommands ?? [],
+      teardownCommands: check.teardownCommands ?? [],
+    },
+    required: check.required !== false,
+  }));
+  return [...explicitChecks, ...httpChecks].map((check, index) => ({
+    ...check,
+    id: check.id ?? checkIdSuffix(baseId, index),
+    baseId: check.baseId ?? baseId,
+    required: check.required !== false,
+  }));
+}
+
+function checksForBase(template, baseId, requirements) {
   return (template.defaultChecks ?? []).map((check) => ({
     ...check,
     baseId,
-  }));
+  })).concat(normalizeRequirementChecks(requirements, baseId));
 }
 
 function summarizeItems(title, items, render) {
@@ -192,7 +256,7 @@ function buildHumanNotes(prd) {
   return [...assumptions, ...openQuestions, ...risks].join('\n');
 }
 
-function buildTask({ id, story, base, templateInfo, dependencyIds, prd }) {
+function buildTask({ id, story, base, templateInfo, dependencyIds, prd, requirements }) {
   const taskType = defaultTaskTypeByTemplate[base.templateId] ?? templateInfo.template.type;
   const skillId = findSkill(templateInfo.registry, base.templateId, taskType);
   return {
@@ -207,7 +271,7 @@ function buildTask({ id, story, base, templateInfo, dependencyIds, prd }) {
     allowedPaths: allowedPathsForSkill(templateInfo.registry, skillId, templateInfo.template),
     expectedChangedFiles: [],
     acceptanceCriteria: story.acceptanceCriteria,
-    checks: checksForBase(templateInfo.template, base.baseId),
+    checks: checksForBase(templateInfo.template, base.baseId, requirements),
     contextBudget: {
       size: 'm',
       maxFiles: taskType === 'backend' ? 16 : 12,
@@ -220,7 +284,7 @@ function buildTask({ id, story, base, templateInfo, dependencyIds, prd }) {
   };
 }
 
-function buildSchemaTask({ id, story, base, templateInfo, prd, dependencyIds = [] }) {
+function buildSchemaTask({ id, story, base, templateInfo, prd, requirements, dependencyIds = [] }) {
   const skillId = findSkill(templateInfo.registry, base.templateId, 'schema', 'ruoyi-database-migration');
   const entities = summarizeItems('数据对象', prd.dataEntities, (entity) => {
     const fields = (entity.fields ?? []).map((field) => `${field.name}:${field.type}${field.required ? ':required' : ''}`).join(', ');
@@ -244,7 +308,7 @@ function buildSchemaTask({ id, story, base, templateInfo, prd, dependencyIds = [
     allowedPaths: allowedPathsForSkill(templateInfo.registry, skillId, templateInfo.template),
     expectedChangedFiles: [],
     acceptanceCriteria: story.acceptanceCriteria,
-    checks: checksForBase(templateInfo.template, base.baseId),
+    checks: checksForBase(templateInfo.template, base.baseId, requirements),
     contextBudget: {
       size: 'm',
       maxFiles: 12,
@@ -264,6 +328,7 @@ function buildTaskPlan(args) {
 
   const project = readJson(args.project);
   const prd = readJson(args.prd);
+  const requirements = loadRequirements(args);
   if ((prd.status !== 'approved' || prd.humanApproval?.approved !== true) && args['allow-draft-prd'] !== true) {
     throw new Error('PRD 尚未人工确认。生成 task-plan 前请先 approve PRD，或仅开发验证时使用 --allow-draft-prd。');
   }
@@ -293,7 +358,7 @@ function buildTaskPlan(args) {
       if (taskType === 'backend' && (prd.dataEntities ?? []).length > 0) {
         schemaTaskId = `TASK-${String(taskCounter).padStart(3, '0')}`;
         taskCounter += 1;
-        tasks.push(buildSchemaTask({ id: schemaTaskId, story, base, templateInfo, prd, dependencyIds: storyDependencyIds }));
+        tasks.push(buildSchemaTask({ id: schemaTaskId, story, base, templateInfo, prd, requirements, dependencyIds: storyDependencyIds }));
       }
 
       const taskId = `TASK-${String(taskCounter).padStart(3, '0')}`;
@@ -304,7 +369,7 @@ function buildTaskPlan(args) {
       if ((taskType === 'middle' || taskType === 'client') && backendTaskId) dependencyIds.push(backendTaskId);
       if ((taskType === 'middle' || taskType === 'client') && !backendTaskId) dependencyIds.push(...storyDependencyIds);
 
-      const task = buildTask({ id: taskId, story, base, templateInfo, dependencyIds, prd });
+      const task = buildTask({ id: taskId, story, base, templateInfo, dependencyIds, prd, requirements });
       if (taskType === 'backend') backendTaskId = taskId;
       tasks.push(task);
     }

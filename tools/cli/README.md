@@ -64,6 +64,7 @@ MYSQL_PWD='romantic.' node tools/cli/engine.mjs real-test \
   --mysql-password-env MYSQL_PWD \
   --database aitest \
   --redis-url redis://default:root123@127.0.0.1:6379 \
+  --scenario-ids backend-sql-migration-smoke,middle-notice-page-smoke,client-announcement-tags \
   --keep-tmp
 ```
 
@@ -74,6 +75,8 @@ node tools/cli/engine.mjs real-test \
   --clone-mode source-template \
   --skip-bootstrap
 ```
+
+`real-test` 会同时输出 `real-project-report.json` 和 `real-project-report.md`，Markdown 报告更适合人工审阅和转交给测试/开发智能体。
 
 ## 任务恢复
 

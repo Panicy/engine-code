@@ -46,6 +46,7 @@ function usage() {
     '  --redis-url redis://default:***@127.0.0.1:6379',
     '  --adapter shell|codex',
     '  --codex-command codex',
+    '  --scenario-ids backend-sql-migration-smoke,middle-notice-page-smoke,client-announcement-tags',
     '',
     '默认 clone 固定 Gitee 基座，执行 backend bootstrap 和真实需求 smoke 场景。',
   ].join('\n');
@@ -94,6 +95,7 @@ function parseArgs(argv) {
       'redis-command',
       'adapter',
       'codex-command',
+      'scenario-ids',
     ]);
     if (!allowed.has(key)) throw new Error(`未知参数：${arg}`);
     const value = argv[i + 1];
@@ -162,6 +164,17 @@ function readJson(filePath) {
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+function markdownList(items, render) {
+  if (!items || items.length === 0) return '- 无';
+  return items.map(render).join('\n');
+}
+
+function writeMarkdown(filePath, content) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${content.trimEnd()}\n`, 'utf8');
+  return filePath;
 }
 
 function assert(condition, message) {
@@ -421,6 +434,60 @@ function runScenario(root, projectPath, workspaces, args, scenarioId) {
   };
 }
 
+function scenarioIds(args) {
+  if (!args['scenario-ids']) {
+    return ['backend-sql-migration-smoke', 'middle-notice-page-smoke', 'client-announcement-tags'];
+  }
+  const ids = args['scenario-ids'].split(',').map((item) => item.trim()).filter(Boolean);
+  if (ids.length === 0) throw new Error('--scenario-ids 不能为空');
+  const unknown = ids.filter((id) => !realDemandScenarios[id]);
+  if (unknown.length > 0) throw new Error(`未知真实需求场景：${unknown.join(', ')}`);
+  return ids;
+}
+
+function renderMarkdownReport(report) {
+  const bootstrapLines = report.bootstrap.skipped
+    ? '- bootstrap: skipped'
+    : markdownList(report.bootstrap.checks, (check) => `- ${check.id}: ${check.status} - ${check.summary}`);
+  const scenarioLines = markdownList(report.scenarios, (scenario) => [
+    `- ${scenario.scenario}: ${scenario.assertion.runStateStatus} / review=${scenario.assertion.reviewVerdict} / loop=${scenario.assertion.loopSummaryStatus}`,
+    `  - workspace: ${scenario.workspace}`,
+    `  - featureDir: ${scenario.featureDir}`,
+    `  - changedFiles: ${scenario.assertion.changedFiles.length > 0 ? scenario.assertion.changedFiles.join(', ') : '无'}`,
+  ].join('\n'));
+  return `# Real Project Report
+
+## Summary
+
+- ok: ${report.ok}
+- cloneMode: ${report.cloneMode}
+- adapter: ${report.adapter}
+- projectPath: ${report.projectPath}
+- root: ${report.root}
+- generatedAt: ${report.generatedAt}
+
+## Bases
+
+${markdownList(Object.entries(report.remotes), ([baseId, remote]) => `- ${baseId}: ${remote}`)}
+
+## Workspaces
+
+${markdownList(Object.entries(report.workspaces), ([baseId, workspace]) => `- ${baseId}: ${workspace}`)}
+
+## Bootstrap
+
+${bootstrapLines}
+
+## Scenarios
+
+${scenarioLines}
+
+## Next Actions
+
+${report.ok ? '- 真实项目 smoke 流程通过，可以继续扩大业务场景和真实 agent 执行覆盖。' : '- 存在失败项，请优先查看 scenarios/bootstrap 中的异常摘要。'}
+`;
+}
+
 function runRealProject(args) {
   const tmpRoot = path.resolve(args['tmp-root']);
   fs.mkdirSync(tmpRoot, { recursive: true });
@@ -436,16 +503,13 @@ function runRealProject(args) {
     }
     const projectPath = createProject(root, args, workspaces);
     const bootstrap = runBootstrap(root, args, workspaces.backend);
-    const scenarios = [
-      runScenario(root, projectPath, workspaces, args, 'backend-sql-migration-smoke'),
-      runScenario(root, projectPath, workspaces, args, 'middle-notice-page-smoke'),
-      runScenario(root, projectPath, workspaces, args, 'client-announcement-tags'),
-    ];
+    const scenarios = scenarioIds(args).map((scenarioId) => runScenario(root, projectPath, workspaces, args, scenarioId));
     const report = {
       ok: scenarios.every((item) => item.ok) && (bootstrap.skipped || bootstrap.state === 'ready'),
       root,
       projectPath,
       cloneMode: args['clone-mode'],
+      adapter: args.adapter,
       remotes,
       workspaces,
       bootstrap,
@@ -453,12 +517,16 @@ function runRealProject(args) {
       generatedAt: new Date().toISOString(),
     };
     const reportPath = path.join(root, 'real-project-report.json');
+    const markdownReportPath = path.join(root, 'real-project-report.md');
     report.reportPath = reportPath;
+    report.markdownReportPath = markdownReportPath;
     writeJson(reportPath, report);
+    writeMarkdown(markdownReportPath, renderMarkdownReport(report));
     cleanup = false;
     if (!args.keepTmp) {
       report.cleanupNote = 'runner 结果默认保留到临时目录，便于审计；如需手动清理可删除 root。';
       writeJson(reportPath, report);
+      writeMarkdown(markdownReportPath, renderMarkdownReport(report));
     }
     return report;
   } finally {

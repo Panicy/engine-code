@@ -600,6 +600,7 @@ function testRealProjectRunnerSourceTemplate() {
     'shell',
   ]));
   assert(result.ok === true, 'real-project-runner source-template 模式应通过');
+  assert(fs.existsSync(result.markdownReportPath), 'real-project-runner 应输出 Markdown 报告');
   assert(result.scenarios.length === 3, 'real-project-runner 应运行 3 个 smoke 场景');
   for (const item of result.scenarios) {
     assert(item.ok === true, `场景 ${item.scenario} 应通过`);
@@ -681,6 +682,49 @@ function writeRichRequirements(baseDir, overrides = {}) {
       performance: ['列表查询需要支持分页。'],
       quality: ['必须验证 401/403/404。'],
     },
+    checksByBase: {
+      middle: [
+        {
+          id: 'middle-notice-static',
+          name: '中台公告标签静态检查',
+          type: 'command',
+          command: 'node -e "process.exit(0)"',
+          required: true,
+        },
+      ],
+    },
+    backendApiChecks: [
+      {
+        id: 'backend-notice-anonymous-401',
+        name: '公告标签匿名访问应 401',
+        method: 'GET',
+        path: '/system/noticeTag/list',
+        expectedStatus: 401,
+        authMode: 'anonymous',
+        required: true,
+      },
+      {
+        id: 'backend-notice-missing-404',
+        name: '公告标签未知接口应 404',
+        method: 'GET',
+        path: '/system/noticeTag/missing',
+        expectedStatus: 404,
+        authMode: 'anonymous',
+        required: true,
+      },
+      {
+        id: 'backend-notice-auth-disabled',
+        name: '临时关闭鉴权后公告标签接口应可达',
+        method: 'GET',
+        path: '/system/noticeTag/list',
+        expectedStatus: 200,
+        authMode: 'auth_disabled',
+        environment: 'test',
+        setupCommands: ['node -e "process.exit(0)"'],
+        teardownCommands: ['node -e "process.exit(0)"'],
+        required: false,
+      },
+    ],
     ...overrides,
   };
   const filePath = path.join(baseDir, `requirements-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
@@ -854,6 +898,7 @@ function testTaskPlannerRichPrdDependencies(baseDir) {
     '--prd', prdPath,
     '--out', taskPlanPath,
     '--run-state-out', runStatePath,
+    '--requirements-file', requirementsPath,
     '--force',
   ]));
   parseCommandJson(runNode([
@@ -889,6 +934,14 @@ function testTaskPlannerRichPrdDependencies(baseDir) {
   assert(firstStoryTasks[0].humanNotes.includes('一期只支持后台维护公告标签'), 'assumptions 应进入 humanNotes');
   assert(firstStoryTasks[0].humanNotes.includes('公告标签是否需要导出'), 'openQuestions 应进入 humanNotes');
   assert(firstStoryTasks[0].humanNotes.includes('历史公告数据可能缺少标签'), 'risks 应进入 humanNotes');
+  const backendChecks = firstStoryTasks[1].checks.map((check) => check.id);
+  const middleChecks = firstStoryTasks[2].checks.map((check) => check.id);
+  assert(backendChecks.includes('backend-notice-anonymous-401'), 'requirements backendApiChecks 应进入 backend task checks');
+  assert(backendChecks.includes('backend-notice-missing-404'), 'requirements backendApiChecks 应支持 404 检查');
+  assert(backendChecks.includes('backend-notice-auth-disabled'), 'requirements backendApiChecks 应支持 auth_disabled 检查');
+  const authDisabledCheck = firstStoryTasks[1].checks.find((check) => check.id === 'backend-notice-auth-disabled');
+  assert(authDisabledCheck.http.teardownCommands.length === 1, 'auth_disabled 检查必须带 teardownCommands');
+  assert(middleChecks.includes('middle-notice-static'), 'requirements checksByBase 应进入对应 base task checks');
 
   const invalidDependencyRequirements = writeRichRequirements(baseDir, {
     userStories: [
@@ -988,6 +1041,16 @@ function testEngineCliThinFlow(baseDir) {
   const feature = path.join(root, 'features', 'application-management');
   initGitWorkspace(backendWorkspace, { 'README.md': 'backend workspace\n' });
   initGitWorkspace(middleWorkspace, { 'README.md': 'middle workspace\n' });
+  const requirementsPath = writeRichRequirements(root, {
+    impactedBaseIds: ['backend', 'middle'],
+    openQuestions: [
+      {
+        question: '相册是否需要导出？',
+        status: 'answered',
+        answer: '一期不需要导出。',
+      },
+    ],
+  });
 
   const projectResult = parseCommandJson(runNode([
     'tools/cli/engine.mjs',
@@ -1010,11 +1073,19 @@ function testEngineCliThinFlow(baseDir) {
     '--summary', '应用新增、编辑、上下架和列表查询',
     '--bases', 'backend,middle',
     '--out-dir', feature,
+    '--requirements-file', requirementsPath,
     '--approve',
     '--by', 'e2e',
     '--force',
   ]));
   assert(featureResult.ok === true, 'CLI init-feature 应成功');
+  const taskPlan = readJson(path.join(feature, 'task-plan.json'));
+  const taskCount = taskPlan.storyGroups.reduce((sum, group) => sum + group.tasks.length, 0);
+  assert(taskCount === 6, 'CLI init-feature --requirements-file 应按多 story 与数据实体拆出 6 个任务');
+  const backendTask = taskPlan.storyGroups[0].tasks.find((task) => task.type === 'backend');
+  const middleTask = taskPlan.storyGroups[0].tasks.find((task) => task.type === 'middle');
+  assert(backendTask.checks.some((check) => check.id === 'backend-notice-anonymous-401'), 'CLI requirements-file 应把 backendApiChecks 写入 backend checks');
+  assert(middleTask.checks.some((check) => check.id === 'middle-notice-static'), 'CLI requirements-file 应把 checksByBase 写入 middle checks');
 
   const runtimeResult = parseCommandJson(runNode([
     'tools/cli/engine.mjs',
@@ -1061,6 +1132,7 @@ function testEngineCliRealTestSourceTemplate() {
   assert(result.ok === true, 'CLI real-test source-template 模式应通过');
   assert(result.cloneMode === 'source-template', 'CLI real-test 应转发 clone-mode');
   assert(result.bootstrap.skipped === true, 'CLI real-test 应转发 skip-bootstrap');
+  assert(fs.existsSync(result.markdownReportPath), 'CLI real-test 应输出 Markdown 报告');
   assert(result.scenarios.length === 3, 'CLI real-test 应运行 3 个 smoke 场景');
 }
 

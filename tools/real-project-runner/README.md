@@ -44,6 +44,7 @@ runner 会在 `/private/tmp/engine-real-project-runner-*` 下生成：
 - `project.json`
 - `.engine/bootstrap-state/backend.json`
 - `real-project-report.json`
+- `real-project-report.md`
 - 三个固定基座 workspace
 
 报告包含：
@@ -51,5 +52,14 @@ runner 会在 `/private/tmp/engine-real-project-runner-*` 下生成：
 - 固定基座 remote。
 - bootstrap 状态和检查。
 - 每个真实需求 smoke 场景的 feature 目录、loop summary 和断言结果。
+
+可用 `--scenario-ids` 指定要跑的场景：
+
+```bash
+node tools/real-project-runner/run-real-project.mjs \
+  --scenario-ids backend-sql-migration-smoke,middle-notice-page-smoke \
+  --clone-mode source-template \
+  --skip-bootstrap
+```
 
 默认保留临时目录，便于审计和排查。

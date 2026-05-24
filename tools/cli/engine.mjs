@@ -166,6 +166,7 @@ function initFeature(options) {
     if (options['approve-prd-by']) args.push('--approve-prd-by', options['approve-prd-by']);
     if (options['approve-task-plan-by']) args.push('--approve-task-plan-by', options['approve-task-plan-by']);
   }
+  if (options['requirements-file']) args.push('--requirements-file', options['requirements-file']);
   if (options.force) args.push('--force');
   runNode(args[0], args.slice(1));
 }
@@ -239,6 +240,7 @@ function realTest(options) {
     'redis-command',
     'adapter',
     'codex-command',
+    'scenario-ids',
   ]) {
     if (options[key]) args.push(`--${key}`, options[key]);
   }

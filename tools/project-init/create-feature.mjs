@@ -20,6 +20,7 @@ function usage() {
     '  --out-dir <feature-dir>',
     '',
     '可选：',
+    '  --requirements-file <requirements.json>',
     '  --approve-prd-by <确认人>',
     '  --approve-task-plan-by <确认人>',
     '  --force',
@@ -114,6 +115,7 @@ function main() {
       '--bases', args.bases,
       '--out', paths.prd,
       ...forceArgs,
+      ...(args['requirements-file'] ? ['--requirements-file', args['requirements-file']] : []),
     ]);
 
     let approvePrdResult = null;
@@ -132,6 +134,7 @@ function main() {
         '--out', paths.taskPlan,
         '--run-state-out', paths.runState,
         ...forceArgs,
+        ...(args['requirements-file'] ? ['--requirements-file', args['requirements-file']] : []),
       ]);
 
       if (args['approve-task-plan-by']) {
