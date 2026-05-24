@@ -190,6 +190,11 @@ function addMinutesIso(minutes) {
   return new Date(Date.now() + minutes * 60 * 1000).toISOString();
 }
 
+function isExpiredIso(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && timestamp <= Date.now();
+}
+
 function flattenTasks(taskPlan) {
   return taskPlan.storyGroups.flatMap((group) => group.tasks.map((task) => ({ ...task, storyId: group.storyId, storyTitle: group.title })));
 }
@@ -224,6 +229,34 @@ function acquireLock(runState, owner, startedAt = nowIso()) {
   runState.status = 'running';
   if (!runState.startedAt) runState.startedAt = timestamp;
   runState.updatedAt = timestamp;
+}
+
+function recoverStaleRunningTasks(runState) {
+  const existing = runState.activeRunLock;
+  const hasRunningTask = Object.values(runState.taskStates ?? {}).some((state) => state.status === 'running');
+  if (!hasRunningTask) return [];
+  const canRecover = !existing || isExpiredIso(existing.expiresAt);
+  if (!canRecover) return [];
+  const recoveredAt = nowIso();
+  const recoveredTaskIds = [];
+  for (const [taskId, state] of Object.entries(runState.taskStates ?? {})) {
+    if (state.status !== 'running') continue;
+    recoveredTaskIds.push(taskId);
+    state.status = 'needs_human';
+    state.lastIssue = {
+      type: 'stale_running_task',
+      summary: `${taskId} 上一次 Run Loop 停留在 running，且运行锁已失效或不存在；引擎已停止猜测并转为 needs_human。`,
+      source: 'orchestrator',
+      requiredDecision: '请检查该 task 的真实代码改动和运行产物，确认后使用 sk retry 恢复重跑。',
+      createdAt: recoveredAt,
+    };
+    state.updatedAt = recoveredAt;
+  }
+  runState.currentTaskId = null;
+  runState.activeRunLock = null;
+  runState.status = 'failed';
+  runState.updatedAt = recoveredAt;
+  return recoveredTaskIds;
 }
 
 function releaseLock(runState) {
@@ -307,6 +340,21 @@ function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, 
     runId: runState.runId,
     taskId: task.id,
     attempts: [item],
+  };
+}
+
+function orchestratorFailureOutcome(error) {
+  return {
+    requestedStatus: 'needs_human',
+    taskRunStatus: 'needs_human',
+    reviewVerdict: null,
+    source: 'orchestrator',
+    agent: { tool: 'run-loop', model: 'orchestrator' },
+    changedFiles: [],
+    checks: [],
+    summary: `Run Loop orchestrator error: ${error.message}`,
+    errors: [error.message],
+    nextActions: ['检查 orchestrator 错误、运行产物和当前 diff 后再恢复任务。'],
   };
 }
 
@@ -533,13 +581,17 @@ async function runLoop(args) {
     'templates-dir': templatesDir,
   });
   validateOrThrow(preReport, 'Run Loop 前置 Validator');
-  await runRuntimePreflight({ args, project, taskPlan, runState, templatesDir, featureDir });
+  const recoveredTaskIds = recoverStaleRunningTasks(runState);
+  if (recoveredTaskIds.length > 0) writeJsonAtomic(args['run-state'], runState);
 
   const executedTaskIds = [];
   acquireLock(runState, owner, startedAt);
   writeJsonAtomic(args['run-state'], runState);
 
   try {
+    await runRuntimePreflight({ args, project, taskPlan, runState, templatesDir, featureDir });
+    writeJsonAtomic(args['run-state'], runState);
+
     let executed = 0;
     const executedThisLoop = new Set();
     while (maxTasks === 0 || executed < maxTasks) {
@@ -557,8 +609,10 @@ async function runLoop(args) {
       runState.activeRunLock.expiresAt = addMinutesIso(30);
       writeJsonAtomic(args['run-state'], runState);
 
+      let taskContext = null;
+      let taskContextPath = artifactPath(featureDir, task.id, 'task-context.json');
       try {
-        const taskContext = buildTaskContext({
+        taskContext = buildTaskContext({
           project,
           prd,
           taskPlan,
@@ -566,7 +620,6 @@ async function runLoop(args) {
           templatesDir,
           repoRoot,
         });
-        const taskContextPath = artifactPath(featureDir, task.id, 'task-context.json');
         writeJsonAtomic(taskContextPath, taskContext);
         if (!runState.artifacts.some((artifact) => artifact.type === 'taskContext' && artifact.path === taskContextPath)) {
           runState.artifacts.push({ type: 'taskContext', path: taskContextPath });
@@ -659,14 +712,38 @@ async function runLoop(args) {
         writeJsonAtomic(args['run-state'], runState);
       } catch (error) {
         const failedAt = nowIso();
-        state.status = 'needs_human';
-        state.lastIssue = {
+        const lastIssue = {
           type: 'orchestrator_error',
           summary: `Run Loop 执行 ${task.id} 时异常：${error.message}`,
           source: 'orchestrator',
           requiredDecision: '请检查运行产物和修复 orchestrator 错误后恢复任务。',
           createdAt: failedAt,
         };
+        if (taskContext) {
+          const taskRunPath = artifactPath(featureDir, task.id, 'task-run.json');
+          const taskRun = buildTaskRun({
+            runState,
+            task,
+            attempt: state.attempts,
+            status: 'needs_human',
+            startedAt: startedTaskAt,
+            finishedAt: failedAt,
+            lastIssue,
+            args,
+            taskContextPath,
+            taskContext,
+            changedFiles: [],
+            outcome: orchestratorFailureOutcome(error),
+          });
+          const mergedTaskRun = mergeTaskRun(readJsonIfExists(taskRunPath), taskRun);
+          schemaValidateArtifact('task-run', mergedTaskRun, taskRunPath);
+          writeJsonAtomic(taskRunPath, mergedTaskRun);
+          if (!runState.artifacts.some((artifact) => artifact.type === 'taskRun' && artifact.path === taskRunPath)) {
+            runState.artifacts.push({ type: 'taskRun', path: taskRunPath });
+          }
+        }
+        state.status = 'needs_human';
+        state.lastIssue = lastIssue;
         state.lastRunId = runState.runId;
         state.updatedAt = failedAt;
         runState.updatedAt = failedAt;

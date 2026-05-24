@@ -24,6 +24,7 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapt
 - `task-run.json` 会追加 attempts，不覆盖历史。
 - `task-run.json` 的 `changedFiles` 由目标基座 git diff 自动采集，不接受 adapter 自报。
 - 非 `mock` adapter 如果声称完成但没有产生任何真实文件变更，task 会进入 `needs_human`。只有纯探针或检查类任务才应显式使用 `--allow-empty-changes true`。
+- 如果上一次执行被外部中断，导致 task 停在 `running` 且运行锁已过期或不存在，下一次 Run Loop 会把该 task 恢复为 `needs_human`，并写入 `stale_running_task`，避免任务永久悬挂或被继续猜测。
 - Run Loop 在调用 adapter 前必须生成 `runs/<taskId>/task-context.json`，并把实际 skill 文档路径和 SHA-256 写入 `task-run.json` 的 `skillContext`。如果 skill 文档缺失，任务会进入 `needs_human`，不会绕过 skill 执行。
 - `--runtime-mode mock|check` 会在开发任务前按模板 `runtimeProfile` 生成 `runs/runtime/<baseId>-runtime.json`。`skip` 为默认值，避免旧流程被本地环境阻断。
 - 调用 Validator 做后置校验。
@@ -196,8 +197,26 @@ node tools/run-loop/run-feature.mjs \
   --mock-fail-check backend-compile
 ```
 
+## 悬挂任务恢复
+
+如果 `sk status` 显示 `runningTasks`，先确认是否仍有真实执行进程。若锁已过期，直接重跑 `sk run`，Run Loop 会自动把悬挂任务转为 `needs_human`。
+
+若人工确认没有活跃执行进程，但锁尚未过期，可以显式恢复：
+
+```bash
+sk retry \
+  --project-dir ../engin-projects/demo \
+  --feature-id app-management \
+  --task-id TASK-001 \
+  --by human \
+  --reason "确认上次执行进程已结束，恢复悬挂任务" \
+  --allow-running
+```
+
+恢复后再执行 `sk run`。
+
 ## 后续增强
 
 - 增强 Checks Runner 的鉴权令牌注入和响应体断言。
 - 增强 Review Runner 的语义审查、权限/菜单/SQL/API 契约一致性检查。
-- 增加更细粒度的运行锁恢复策略。
+- 增加运行中进程心跳和更细粒度的锁归属识别。

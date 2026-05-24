@@ -61,7 +61,7 @@ function parseOptions(argv) {
       continue;
     }
     const key = arg.slice(2);
-    if (['force', 'approve', 'keep-tmp', 'skip-bootstrap', 'skip-bases', 'allow-done'].includes(key)) {
+    if (['force', 'approve', 'keep-tmp', 'skip-bootstrap', 'skip-bases', 'allow-done', 'allow-running'].includes(key)) {
       options[key] = true;
       continue;
     }
@@ -798,6 +798,7 @@ function resolveTask(options, action) {
     '--by', options.by,
     '--reason', options.reason,
     ...(options['allow-done'] ? ['--allow-done'] : []),
+    ...(options['allow-running'] ? ['--allow-running'] : []),
   ]);
 }
 

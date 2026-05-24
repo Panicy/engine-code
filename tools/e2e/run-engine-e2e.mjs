@@ -2487,6 +2487,28 @@ function testRecoveryListIssues(baseDir) {
   assert(result.issues.every((item) => ['checks_failed', 'review_failed', 'needs_human'].includes(item.status)), 'list-issues 不应列 ready/done/cancelled');
 }
 
+function testRecoveryListIssuesReportsRunningLock(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-list-running-lock');
+  const runState = readJson(paths.runState);
+  runState.status = 'running';
+  runState.currentTaskId = 'TASK-001';
+  runState.activeRunLock = {
+    lockId: 'LOCK-E2E',
+    owner: 'run-loop',
+    acquiredAt: new Date(Date.now() - 60_000).toISOString(),
+    heartbeatAt: new Date(Date.now() - 60_000).toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+  runState.taskStates['TASK-001'].status = 'running';
+  writeJsonFile(paths.runState, runState);
+
+  const result = runRecoveryListIssues(['--run-state', paths.runState]);
+  assert(result.status === 'running', 'list-issues 应输出 run-state.status');
+  assert(result.activeRunLock?.lockId === 'LOCK-E2E', 'list-issues 应输出 activeRunLock');
+  assert(result.runningTasks.length === 1 && result.runningTasks[0].taskId === 'TASK-001', 'list-issues 应列出 running task 诊断');
+  assert(result.issues.length === 0, 'running 诊断不应混入异常 issue 列表');
+}
+
 function testRecoveryListIssuesEmpty(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'recovery-list-empty');
   const result = runRecoveryListIssues(['--run-state', paths.runState]);
@@ -2571,6 +2593,26 @@ function testRecoveryRejectsRetryForStableStatuses(baseDir) {
   }
 }
 
+function testRecoveryAllowRunningRetry(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-allow-running-retry');
+  const runState = setTaskStatus(paths, 'TASK-001', 'running', issueFixture('running stale'));
+  runState.status = 'running';
+  runState.currentTaskId = 'TASK-001';
+  runState.activeRunLock = {
+    lockId: 'LOCK-E2E',
+    owner: 'run-loop',
+    acquiredAt: new Date(Date.now() - 60_000).toISOString(),
+    heartbeatAt: new Date(Date.now() - 60_000).toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+  writeJsonFile(paths.runState, runState);
+  const result = runRecoveryResolveTask([...resolveArgs(paths, 'TASK-001', 'retry'), '--allow-running']);
+  const after = readJson(paths.runState);
+  assert(result.fromStatus === 'running' && result.toStatus === 'ready', 'running retry --allow-running 应恢复 ready');
+  assert(after.taskStates['TASK-001'].status === 'ready', 'allow-running 应写回 ready');
+  assert(after.activeRunLock === null && after.currentTaskId === null, 'allow-running 应清理运行锁和 currentTaskId');
+}
+
 function testRecoveryAllowDoneRetry(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'recovery-allow-done-retry');
   const runState = setTaskStatus(paths, 'TASK-001', 'done', null);
@@ -2633,6 +2675,30 @@ function testRecoveryRetryLetsRunLoopContinue(baseDir) {
   const runState = readJson(paths.runState);
   assert(result.summary.taskSummary.done.includes('TASK-001'), 'retry 后 Run Loop 应继续执行恢复任务');
   assert(runState.taskStates['TASK-001'].status === 'done', '恢复任务执行后应 done');
+}
+
+function testRunLoopRecoversExpiredRunningTask(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'run-loop-recovers-expired-running');
+  const runState = readJson(paths.runState);
+  runState.status = 'running';
+  runState.currentTaskId = 'TASK-001';
+  runState.activeRunLock = {
+    lockId: 'LOCK-EXPIRED',
+    owner: 'run-loop',
+    acquiredAt: new Date(Date.now() - 120_000).toISOString(),
+    heartbeatAt: new Date(Date.now() - 120_000).toISOString(),
+    expiresAt: new Date(Date.now() - 60_000).toISOString(),
+  };
+  runState.taskStates['TASK-001'].status = 'running';
+  runState.taskStates['TASK-001'].attempts = 1;
+  writeJsonFile(paths.runState, runState);
+
+  const result = runLoop(paths, ['--agent-adapter', 'mock']);
+  const after = readJson(paths.runState);
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), '过期 running task 应恢复为 needs_human');
+  assert(after.taskStates['TASK-001'].status === 'needs_human', 'run-state 应写回 needs_human');
+  assert(after.taskStates['TASK-001'].lastIssue.type === 'stale_running_task', '应记录 stale_running_task');
+  assert(after.activeRunLock === null, '恢复后应释放当前运行锁');
 }
 
 function testRecoveryCancelPreventsRunLoopExecution(baseDir) {
@@ -2730,6 +2796,7 @@ const tests = [
   ['评审失败复跑入口', testReviewFailureRetry],
   ['needs_human 非阻塞状态', testNeedsHuman],
   ['Recovery list-issues 正常', testRecoveryListIssues],
+  ['Recovery list-issues running 诊断', testRecoveryListIssuesReportsRunningLock],
   ['Recovery list-issues 空列表', testRecoveryListIssuesEmpty],
   ['Recovery show-task 有 review', testRecoveryShowTaskWithReview],
   ['Recovery show-task 无 review', testRecoveryShowTaskWithoutReview],
@@ -2738,11 +2805,13 @@ const tests = [
   ['Recovery needs_human retry', testRecoveryRetryNeedsHuman],
   ['Recovery needs_human cancel', testRecoveryCancelNeedsHuman],
   ['Recovery 稳定状态拒绝 retry', testRecoveryRejectsRetryForStableStatuses],
+  ['Recovery allow-running retry', testRecoveryAllowRunningRetry],
   ['Recovery allow-done retry', testRecoveryAllowDoneRetry],
   ['Recovery 非 needs_human 拒绝 cancel', testRecoveryRejectsCancelForNonNeedsHuman],
   ['Recovery 缺 by/reason 拒绝且不改文件', testRecoveryRejectsMissingByReason],
   ['Recovery task 不存在和非法 action 拒绝', testRecoveryRejectsMissingTaskAndInvalidAction],
   ['Recovery retry 后 Run Loop 继续执行', testRecoveryRetryLetsRunLoopContinue],
+  ['Run Loop 恢复过期 running task', testRunLoopRecoversExpiredRunningTask],
   ['Recovery cancel 后 Run Loop 不执行', testRecoveryCancelPreventsRunLoopExecution],
 ];
 

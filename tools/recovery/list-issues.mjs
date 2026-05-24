@@ -58,6 +58,37 @@ function issuesFromRunState(runState) {
     }));
 }
 
+function lockSummary(runState) {
+  if (!runState.activeRunLock) return null;
+  const expiresAtMs = Date.parse(runState.activeRunLock.expiresAt);
+  const nowMs = Date.now();
+  return {
+    ...runState.activeRunLock,
+    expired: Number.isFinite(expiresAtMs) ? expiresAtMs <= nowMs : false,
+    secondsUntilExpiry: Number.isFinite(expiresAtMs) ? Math.floor((expiresAtMs - nowMs) / 1000) : null,
+  };
+}
+
+function runningTasksFromRunState(runState) {
+  const lock = lockSummary(runState);
+  return Object.entries(runState.taskStates ?? {})
+    .filter(([, state]) => state.status === 'running')
+    .map(([taskId, state]) => ({
+      taskId,
+      status: state.status,
+      attempts: state.attempts,
+      maxAttempts: state.maxAttempts ?? null,
+      updatedAt: state.updatedAt,
+      currentTask: runState.currentTaskId === taskId,
+      hasActiveLock: Boolean(runState.activeRunLock),
+      lockExpired: lock?.expired ?? false,
+      summary: lock?.expired
+        ? `${taskId} 仍是 running，但运行锁已过期。建议重新执行 sk run 让引擎恢复为 needs_human，或人工检查后 retry。`
+        : `${taskId} 正在运行中。若长时间无进展，请等待锁过期后重跑，或人工确认没有进程后处理。`,
+      nextRunnable: false,
+    }));
+}
+
 function main() {
   try {
     const args = parseArgs(process.argv);
@@ -70,6 +101,10 @@ function main() {
     console.log(JSON.stringify({
       ok: true,
       runId: runState.runId,
+      status: runState.status,
+      currentTaskId: runState.currentTaskId ?? null,
+      activeRunLock: lockSummary(runState),
+      runningTasks: runningTasksFromRunState(runState),
       issues: issuesFromRunState(runState),
     }, null, 2));
   } catch (error) {

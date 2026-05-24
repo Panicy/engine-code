@@ -74,6 +74,8 @@ sk status \
   --feature-id app-management
 ```
 
+`sk status` 除了异常任务，还会返回 `activeRunLock` 和 `runningTasks`，用于诊断 Run Loop 被外部中断后停在 `running` 的情况。
+
 ## 真实项目测试
 
 `real-test` 会调用固定三端基座真实项目测试流程：拉取 backend / middle / client 固定基座，创建 `project.json`，执行后端 bootstrap，并跑真实需求 smoke 场景。
@@ -113,6 +115,17 @@ sk retry \
   --task-id TASK-001 \
   --by human \
   --reason "已修复接口 404"
+```
+
+如果任务停在 `running`，且你已确认没有活跃执行进程，可以人工恢复：
+
+```bash
+sk retry \
+  --feature .engine/projects/demo/features/app-management \
+  --task-id TASK-001 \
+  --by human \
+  --reason "确认执行进程已结束，恢复悬挂任务" \
+  --allow-running
 ```
 
 ```bash

@@ -21,6 +21,7 @@ function usage() {
     '',
     '可选：',
     '  --allow-done   允许将误标 done 的 task 恢复为 ready',
+    '  --allow-running   允许人工确认后将悬挂 running task 恢复为 ready，并清理当前运行锁',
   ].join('\n');
 }
 
@@ -34,6 +35,10 @@ function parseArgs(argv) {
     }
     if (arg === '--allow-done') {
       args['allow-done'] = true;
+      continue;
+    }
+    if (arg === '--allow-running') {
+      args['allow-running'] = true;
       continue;
     }
     if (!arg.startsWith('--')) throw new Error(`未知参数：${arg}`);
@@ -76,6 +81,7 @@ function nextDecisionId(runState) {
 function resolveStatus(fromStatus, action, options = {}) {
   if (action === 'retry') {
     if (fromStatus === 'done' && options.allowDone === true) return 'ready';
+    if (fromStatus === 'running' && options.allowRunning === true) return 'ready';
     if (!retryableStatuses.has(fromStatus)) {
       throw new Error(`状态 ${fromStatus} 不允许 retry。`);
     }
@@ -117,13 +123,20 @@ function main() {
     if (!taskState) throw new Error(`task 不存在：${args['task-id']}`);
 
     const fromStatus = taskState.status;
-    const toStatus = resolveStatus(fromStatus, args.action, { allowDone: args['allow-done'] === true });
+    const toStatus = resolveStatus(fromStatus, args.action, {
+      allowDone: args['allow-done'] === true,
+      allowRunning: args['allow-running'] === true,
+    });
     const decidedAt = nowIso();
     taskState.status = toStatus;
     taskState.updatedAt = decidedAt;
     if (toStatus === 'ready') taskState.lastIssue = null;
     if (fromStatus === 'done' && toStatus === 'ready') {
       runState.completedTasks = (runState.completedTasks ?? []).filter((taskId) => taskId !== args['task-id']);
+    }
+    if (fromStatus === 'running' && toStatus === 'ready') {
+      runState.activeRunLock = null;
+      runState.currentTaskId = null;
     }
     if (runState.currentTaskId === args['task-id']) runState.currentTaskId = null;
     runState.updatedAt = decidedAt;

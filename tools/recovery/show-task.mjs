@@ -48,6 +48,10 @@ function readJsonIfExists(filePath) {
   return JSON.parse(fs.readFileSync(abs, 'utf8'));
 }
 
+function fileExists(filePath) {
+  return fs.existsSync(path.resolve(repoRoot, filePath));
+}
+
 function summarizeTaskRun(taskRun) {
   if (!taskRun) return null;
   return {
@@ -99,14 +103,24 @@ function main() {
     if (!taskState) throw new Error(`task 不存在：${args['task-id']}`);
 
     const taskDir = path.join(args['feature-dir'], 'runs', args['task-id']);
-    const taskRun = readJsonIfExists(path.join(taskDir, 'task-run.json'));
-    const review = readJsonIfExists(path.join(taskDir, 'review.json'));
+    const taskContextPath = path.join(taskDir, 'task-context.json');
+    const taskRunPath = path.join(taskDir, 'task-run.json');
+    const reviewPath = path.join(taskDir, 'review.json');
+    const taskRun = readJsonIfExists(taskRunPath);
+    const review = readJsonIfExists(reviewPath);
     console.log(JSON.stringify({
       ok: true,
       runId: runState.runId,
       taskId: args['task-id'],
       state: taskState,
       lastIssue: taskState.lastIssue ?? null,
+      diagnostics: {
+        currentTask: runState.currentTaskId === args['task-id'],
+        activeRunLock: runState.activeRunLock ?? null,
+        taskContextExists: fileExists(taskContextPath),
+        taskRunExists: fileExists(taskRunPath),
+        reviewExists: fileExists(reviewPath),
+      },
       taskRun: summarizeTaskRun(taskRun),
       review: summarizeReview(review),
     }, null, 2));
