@@ -51,10 +51,19 @@ sk runtime \
 sk run \
   --project-dir ../engin-projects/demo \
   --feature-id app-management \
-  --agent-adapter shell \
-  --shell-command "your-agent-command" \
+  --agent-adapter codex \
   --runtime-mode check \
   --checks-mode real
+```
+
+真实 `runtime-mode check` 或 `checks-mode real/command` 必须显式指定 `--agent-adapter`，避免误用默认 mock agent。只做流程演练时使用：
+
+```bash
+sk run \
+  --project-dir ../engin-projects/demo \
+  --feature-id app-management \
+  --runtime-mode mock \
+  --checks-mode mock
 ```
 
 ```bash

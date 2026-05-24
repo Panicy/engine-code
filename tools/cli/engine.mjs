@@ -45,6 +45,7 @@ function usage() {
     '  sk init-project 示例项目',
     '  sk init-feature --project-dir ../engin-projects/demo --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
     '  sk runtime --project-dir ../engin-projects/demo --feature-id app --mode mock',
+    '  sk run --project-dir ../engin-projects/demo --feature-id app --agent-adapter codex --runtime-mode check --checks-mode real',
     '  sk run --project-dir ../engin-projects/demo --feature-id app --runtime-mode mock --checks-mode mock',
     '  MYSQL_PWD=romantic. sk real-test --mysql-command /usr/local/mysql/bin/mysql --mysql-user root --mysql-password-env MYSQL_PWD --database aitest --redis-url redis://default:root123@127.0.0.1:6379',
     '  sk status --project-dir ../engin-projects/demo --feature-id app',
@@ -386,7 +387,7 @@ function renderEngineMarkdown(project, projectDir) {
     '# 仅在用户明确确认 PRD 和任务拆分后执行，AI 不得自行代替 human 确认',
     'sk init-feature --project-dir . --feature-id app-management --name 应用管理 --summary 应用的新增、编辑、启停、查询和权限控制 --approve --by human',
     '',
-    'sk run --project-dir . --feature-id app-management --runtime-mode check --checks-mode real',
+    'sk run --project-dir . --feature-id app-management --agent-adapter codex --runtime-mode check --checks-mode real',
     '',
     'sk status --project-dir . --feature-id app-management',
     '```',
@@ -470,7 +471,7 @@ function buildEngineWorkspace(project, projectDir) {
     commands: {
       initFeature: 'sk init-feature --project-dir . --feature-id <featureId> --name <功能名称> --summary <功能摘要>',
       approveFeature: 'sk init-feature --project-dir . --feature-id <featureId> --name <功能名称> --summary <功能摘要> --approve --by human',
-      run: 'sk run --project-dir . --feature-id <featureId> --runtime-mode check --checks-mode real',
+      run: 'sk run --project-dir . --feature-id <featureId> --agent-adapter codex --runtime-mode check --checks-mode real',
       status: 'sk status --project-dir . --feature-id <featureId>',
       retry: 'sk retry --project-dir . --feature-id <featureId> --task-id <taskId> --by human --reason <原因>',
       cancel: 'sk cancel --project-dir . --feature-id <featureId> --task-id <taskId> --by human --reason <原因>',
@@ -690,10 +691,23 @@ function runtime(options) {
   runNode(args[0], args.slice(1));
 }
 
+function requiresExplicitAgentAdapter(options) {
+  const checksMode = options['checks-mode'] ?? 'mock';
+  const runtimeMode = options['runtime-mode'] ?? 'skip';
+  return ['real', 'command'].includes(checksMode) || runtimeMode === 'check';
+}
+
 function run(options) {
   const featureDir = inferFeatureDir(options);
   const project = inferProjectPath(options);
   const files = featureFiles(featureDir);
+  if (!options['agent-adapter'] && requiresExplicitAgentAdapter(options)) {
+    throw new Error([
+      '真实运行必须显式指定 --agent-adapter，禁止在 real/check 模式下默认使用 mock-agent。',
+      '开发执行请使用：--agent-adapter codex、--agent-adapter shell 或 --agent-adapter external-agent。',
+      '只做流程演练请使用：--runtime-mode mock --checks-mode mock。',
+    ].join('\n'));
+  }
   const args = [
     'tools/run-loop/run-feature.mjs',
     '--project', project,

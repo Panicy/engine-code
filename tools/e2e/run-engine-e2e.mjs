@@ -1186,6 +1186,19 @@ function testEngineCliInitFeatureRejectsMissingProject(baseDir) {
   assert(result.stderr.includes('sk init-project'), 'init-feature project-dir 错误应提示先初始化项目');
 }
 
+function testEngineCliRunRequiresExplicitAgentForRealModes(baseDir) {
+  const result = runNode([
+    'tools/cli/engine.mjs',
+    'run',
+    '--project-dir', path.join(baseDir, 'any-project'),
+    '--feature-id', 'any-feature',
+    '--runtime-mode', 'check',
+    '--checks-mode', 'real',
+  ], { expectFailure: true });
+  assert(result.stderr.includes('真实运行必须显式指定 --agent-adapter'), 'real/check 模式应拒绝默认 mock agent');
+  assert(result.stderr.includes('--agent-adapter codex'), '错误提示应说明可用真实 agent adapter');
+}
+
 function testEngineCliInitProjectNameOnly(baseDir) {
   const projectsRoot = path.join(baseDir, 'engin-projects-by-name');
   const defaultDirResult = parseCommandJson(runNode([
@@ -1227,6 +1240,7 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   assert(defaultDirWorkspace.kind === 'sk-engine-workspace', '.engine-workspace.json 应声明 workspace 类型');
   assert(defaultDirWorkspace.files.project === 'project.json', '.engine-workspace.json 应记录 project.json 入口');
   assert(defaultDirWorkspace.commands.run.includes('sk run --project-dir .'), '.engine-workspace.json 应记录运行命令');
+  assert(defaultDirWorkspace.commands.run.includes('--agent-adapter codex'), '.engine-workspace.json 的真实运行命令应显式使用 codex adapter');
   assert(defaultDirWorkspace.intentRules.boot.requiredReads.includes('ENGINE.md'), '.engine-workspace.json 应要求启动读取 ENGINE.md');
   assert(defaultDirWorkspace.intentRules.newFeature.requiredFlow[0] === 'create_prd_json', '.engine-workspace.json 应约定新需求先创建 PRD JSON');
   assert(defaultDirWorkspace.intentRules.newFeature.forbiddenBeforePrdApproval.includes('edit_base_code'), '.engine-workspace.json 应限制 PRD 确认前不能改业务代码');
@@ -2629,6 +2643,7 @@ const tests = [
   ['Engine CLI 薄流程', testEngineCliThinFlow],
   ['Engine CLI project-dir', testEngineCliProjectDir],
   ['Engine CLI init-feature 拒绝非项目目录', testEngineCliInitFeatureRejectsMissingProject],
+  ['Engine CLI real/check 要求显式 agent', testEngineCliRunRequiresExplicitAgentForRealModes],
   ['Engine CLI init-project 仅输入名称', testEngineCliInitProjectNameOnly],
   ['Engine CLI real-test source-template', testEngineCliRealTestSourceTemplate],
   ['max-tasks 暂停流程', testMaxTasksPause],
