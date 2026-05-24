@@ -7,7 +7,7 @@ function createCodexAdapter() {
     model: 'codex',
     argPrefix: 'codex',
     defaultCommand: 'codex',
-    defaultExtraArgs: ['exec'],
+    defaultExtraArgs: ['exec', '--sandbox', 'workspace-write'],
     supportsModelArg: true,
     label: 'Codex CLI',
   });

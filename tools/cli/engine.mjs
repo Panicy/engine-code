@@ -61,7 +61,7 @@ function parseOptions(argv) {
       continue;
     }
     const key = arg.slice(2);
-    if (['force', 'approve', 'keep-tmp', 'skip-bootstrap', 'skip-bases'].includes(key)) {
+    if (['force', 'approve', 'keep-tmp', 'skip-bootstrap', 'skip-bases', 'allow-done'].includes(key)) {
       options[key] = true;
       continue;
     }
@@ -796,6 +796,7 @@ function resolveTask(options, action) {
     '--action', action,
     '--by', options.by,
     '--reason', options.reason,
+    ...(options['allow-done'] ? ['--allow-done'] : []),
   ]);
 }
 

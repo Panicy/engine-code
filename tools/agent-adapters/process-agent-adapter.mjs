@@ -6,6 +6,22 @@ function outputSummary(result) {
   return output ? output.slice(0, 1000) : `exit ${result.status ?? 'unknown'}`;
 }
 
+function outputText(result) {
+  return [result.stdout, result.stderr].filter(Boolean).join('\n');
+}
+
+function indicatesWriteBlocked(output) {
+  return [
+    /sandbox:\s*read-?only/i,
+    /read-?only\s+(?:file\s+)?system/i,
+    /只读/,
+    /无法写(?:入|文件)?/,
+    /不能写(?:入|文件)?/,
+    /permission denied/i,
+    /operation not permitted/i,
+  ].some((pattern) => pattern.test(output));
+}
+
 function normalizeExtraArgs(value, defaultExtraArgs = []) {
   if (!value) return defaultExtraArgs;
   return Array.isArray(value) ? value : [value];
@@ -130,6 +146,18 @@ function createProcessAgentAdapter(config) {
           model: currentModel,
           summary,
           errors: [`${id} command exited with status ${result.status}: ${command}`],
+        });
+      }
+      if (indicatesWriteBlocked(outputText(result))) {
+        return needsHuman({
+          tool,
+          model: currentModel,
+          summary: `${id} adapter 输出显示执行环境不可写：${summary}`,
+          errors: [`${id} adapter write blocked`],
+          nextActions: [
+            `请用可写 sandbox 重跑，例如为 Codex 使用 --${argPrefix}-extra-arg --sandbox --${argPrefix}-extra-arg workspace-write。`,
+            '如任务已被误标为 done，可使用 recovery retry --allow-done 合规恢复后重跑。',
+          ],
         });
       }
       return {

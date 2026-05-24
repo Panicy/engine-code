@@ -2091,6 +2091,10 @@ if (mode === 'fail') {
   console.error('fake codex failed');
   process.exit(7);
 }
+if (mode === 'read-only') {
+  console.log('sandbox: read-only');
+  console.log('环境只读，无法写文件');
+}
 if (mode === 'timeout') {
   setTimeout(() => {}, 5000);
 } else {
@@ -2178,6 +2182,16 @@ function testCodexAdapterDefaultsToExec(baseDir) {
     '--max-tasks', '1',
   ]);
   assert(result.summary.taskSummary.done.includes('TASK-001'), '未传 --codex-extra-arg 时应默认使用 exec 子命令');
+}
+
+function testCodexAdapterReadOnlyOutputNeedsHuman(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-read-only-output');
+  const result = runLoop(paths, codexArgs(fakeCodex, 'read-only'));
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), 'codex 输出只读环境时不应标记 done');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(taskRun.attempts[0].summary.includes('不可写'), '只读环境应写入明确 summary');
+  assert(taskRun.attempts[0].errors.includes('codex adapter write blocked'), '只读环境应记录 write blocked error');
 }
 
 function testCodexAdapterAllowedPathPass(baseDir) {
@@ -2553,6 +2567,19 @@ function testRecoveryRejectsRetryForStableStatuses(baseDir) {
   }
 }
 
+function testRecoveryAllowDoneRetry(baseDir) {
+  const paths = prepareApprovedFeature(baseDir, 'recovery-allow-done-retry');
+  const runState = setTaskStatus(paths, 'TASK-001', 'done', null);
+  runState.completedTasks = ['TASK-001'];
+  writeJsonFile(paths.runState, runState);
+  const result = runRecoveryResolveTask([...resolveArgs(paths, 'TASK-001', 'retry'), '--allow-done']);
+  const after = readJson(paths.runState);
+  assert(result.fromStatus === 'done' && result.toStatus === 'ready', 'done retry --allow-done 应恢复 ready');
+  assert(after.taskStates['TASK-001'].status === 'ready', 'allow-done 应写回 ready');
+  assert(!after.completedTasks.includes('TASK-001'), 'allow-done 应从 completedTasks 移除 task');
+  assert(after.decisions.at(-1).action === 'retry', 'allow-done 应记录 retry 决策');
+}
+
 function testRecoveryRejectsCancelForNonNeedsHuman(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'recovery-reject-cancel-review-failed');
   setTaskStatus(paths, 'TASK-001', 'review_failed', issueFixture('review failed'));
@@ -2678,6 +2705,7 @@ const tests = [
   ['Codex Adapter fake 成功不改文件', testCodexAdapterSuccessNoChanges],
   ['Codex Adapter exec prompt 形态', testCodexAdapterExecPromptShape],
   ['Codex Adapter 默认 exec 子命令', testCodexAdapterDefaultsToExec],
+  ['Codex Adapter 只读输出进入 needs_human', testCodexAdapterReadOnlyOutputNeedsHuman],
   ['Codex Adapter fake 修改允许路径', testCodexAdapterAllowedPathPass],
   ['Codex Adapter fake 修改越界路径', testCodexAdapterOutOfScopeReviewFail],
   ['Codex Adapter 忽略伪造 changedFiles', testCodexAdapterIgnoresFakeChangedFiles],
@@ -2706,6 +2734,7 @@ const tests = [
   ['Recovery needs_human retry', testRecoveryRetryNeedsHuman],
   ['Recovery needs_human cancel', testRecoveryCancelNeedsHuman],
   ['Recovery 稳定状态拒绝 retry', testRecoveryRejectsRetryForStableStatuses],
+  ['Recovery allow-done retry', testRecoveryAllowDoneRetry],
   ['Recovery 非 needs_human 拒绝 cancel', testRecoveryRejectsCancelForNonNeedsHuman],
   ['Recovery 缺 by/reason 拒绝且不改文件', testRecoveryRejectsMissingByReason],
   ['Recovery task 不存在和非法 action 拒绝', testRecoveryRejectsMissingTaskAndInvalidAction],

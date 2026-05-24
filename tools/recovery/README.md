@@ -35,9 +35,10 @@ node tools/recovery/resolve-task.mjs \
 Rules:
 
 - `checks_failed`, `review_failed`, `needs_human` + `retry` -> `ready`
+- `done` + `retry --allow-done` -> `ready`，用于恢复被误标完成的任务
 - `needs_human` + `cancel` -> `cancelled`
 - `cancel` is rejected for non-`needs_human` tasks
-- `ready`, `running`, `done`, and `cancelled` reject `retry`
+- `ready`, `running`, `done` without `--allow-done`, and `cancelled` reject `retry`
 
 Every successful resolution appends a structured decision to `run-state.decisions`.
 Successful resolutions also recalculate `run-state.status`. Validation or argument failures happen before the atomic write, so a failed resolution does not modify `run-state.json`.
