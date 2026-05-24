@@ -1198,9 +1198,19 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   ]));
   assert(defaultDirResult.ok === true, 'CLI init-project 未传 project-dir 时应成功');
   assert(defaultDirResult.outputPath === path.join(projectsRoot, '示例项目', 'project.json'), '中文名称应作为默认项目目录名');
+  assert(defaultDirResult.conventionFiles.guidePath === path.join(projectsRoot, '示例项目', 'ENGINE.md'), 'init-project 应生成 ENGINE.md');
+  assert(defaultDirResult.conventionFiles.workspacePath === path.join(projectsRoot, '示例项目', '.engine-workspace.json'), 'init-project 应生成 .engine-workspace.json');
   const defaultDirProject = readJson(defaultDirResult.outputPath);
+  const defaultDirGuide = fs.readFileSync(defaultDirResult.conventionFiles.guidePath, 'utf8');
+  const defaultDirWorkspace = readJson(defaultDirResult.conventionFiles.workspacePath);
   assert(defaultDirProject.projectId.startsWith('project-'), '中文名称未提供 project-id 时应生成安全 projectId');
   assert(!/^project-\d{14}$/.test(defaultDirProject.projectId), '中文名称生成的 projectId 不应退回时间戳随机值');
+  assert(defaultDirGuide.includes('AI 编辑器规则'), 'ENGINE.md 应包含 AI 编辑器协作规则');
+  assert(defaultDirGuide.includes('sk run --project-dir .'), 'ENGINE.md 应使用项目根目录相对命令');
+  assert(defaultDirWorkspace.kind === 'sk-engine-workspace', '.engine-workspace.json 应声明 workspace 类型');
+  assert(defaultDirWorkspace.files.project === 'project.json', '.engine-workspace.json 应记录 project.json 入口');
+  assert(defaultDirWorkspace.commands.run.includes('sk run --project-dir .'), '.engine-workspace.json 应记录运行命令');
+  assert(defaultDirWorkspace.bases.length === 3, '.engine-workspace.json 应记录三端基座');
 
   const projectDir = path.join(baseDir, 'engin-projects', 'name-only-demo');
   const result = parseCommandJson(runNode([

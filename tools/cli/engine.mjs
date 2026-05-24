@@ -232,6 +232,152 @@ function prepareBaseWorkspace(base, cloneMode, force) {
   return { baseId: base.baseId, workspace: base.workspace, cloneMode };
 }
 
+function toProjectRelative(projectDir, filePath) {
+  const absFilePath = path.resolve(repoRoot, filePath);
+  const relative = path.relative(projectDir, absFilePath);
+  return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? relative : filePath;
+}
+
+function writeFileIfAllowed(filePath, content, force) {
+  if (fs.existsSync(filePath) && force !== true) {
+    throw new Error(`约定文件已存在，拒绝覆盖：${filePath}。如确认覆盖，请使用 --force。`);
+  }
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, 'utf8');
+  return filePath;
+}
+
+function renderEngineMarkdown(project, projectDir) {
+  const bases = (project.bases ?? [])
+    .map((base) => [
+      `### ${base.baseId}`,
+      '',
+      `- templateId: \`${base.templateId}\``,
+      `- repo: \`${base.repo}\``,
+      `- workspace: \`${toProjectRelative(projectDir, base.workspace)}\``,
+    ].join('\n'))
+    .join('\n\n');
+  return [
+    `# ${project.name} 引擎项目约定`,
+    '',
+    '本项目由 `sk engine` 管理。AI 编辑器和开发者都应围绕 PRD、任务拆分、skill、Run Loop 协作，不要绕过引擎直接开发未知功能。',
+    '',
+    '## 核心流程',
+    '',
+    '1. 使用 `sk init-feature` 创建功能 PRD。',
+    '2. 人工确认 PRD 和任务拆分。',
+    '3. 使用 `sk run` 执行开发循环。',
+    '4. 使用 `sk status` 查看异常任务。',
+    '5. 使用 `sk retry` 或 `sk cancel` 处理异常状态。',
+    '',
+    '## 常用命令',
+    '',
+    '```bash',
+    'sk init-feature --project-dir . --feature-id app-management --name 应用管理 --summary 应用的新增、编辑、启停、查询和权限控制',
+    '',
+    'sk init-feature --project-dir . --feature-id app-management --name 应用管理 --summary 应用的新增、编辑、启停、查询和权限控制 --approve --by human',
+    '',
+    'sk run --project-dir . --feature-id app-management --runtime-mode check --checks-mode real',
+    '',
+    'sk status --project-dir . --feature-id app-management',
+    '```',
+    '',
+    '## 项目结构',
+    '',
+    '```text',
+    'project.json',
+    'ENGINE.md',
+    '.engine-workspace.json',
+    'bases/',
+    '  backend/',
+    '  middle/',
+    '  client/',
+    'features/',
+    '  <feature-id>/',
+    '    prd.json',
+    '    task-plan.json',
+    '    run-state.json',
+    '    runs/',
+    '```',
+    '',
+    '## AI 编辑器规则',
+    '',
+    '- 开发前必须先读取本文件、`project.json`、对应功能的 `prd.json`、`task-plan.json` 和 `run-state.json`。',
+    '- 不要凭空开发功能；必须基于 `task-plan.json` 中的 task 执行。',
+    '- 每个 task 必须遵守 `requiredSkillId` 绑定的 skill。',
+    '- 不要修改 `allowedPaths` 外的文件；越界修改会被 Review Runner 标记为失败。',
+    '- 不要手动篡改 `run-state.json`、`task-run.json`、`review.json` 等运行产物。',
+    '- 数据库变更必须进入任务上下文和 SQL/迁移文件，不能只改业务代码。',
+    '- 接口开发应覆盖 401、403、404、菜单权限、鉴权关闭测试和鉴权恢复测试等检查。',
+    '',
+    '## 三端基座',
+    '',
+    bases,
+    '',
+    '## 机器可读约定',
+    '',
+    'AI 编辑器或后续 UI 可以读取 `.engine-workspace.json` 获取项目入口、默认命令和目录约定。',
+    '',
+  ].join('\n');
+}
+
+function buildEngineWorkspace(project, projectDir) {
+  return {
+    schemaVersion: '0.1.0',
+    kind: 'sk-engine-workspace',
+    projectId: project.projectId,
+    name: project.name,
+    projectDir: '.',
+    files: {
+      project: 'project.json',
+      guide: 'ENGINE.md',
+      featuresDir: 'features',
+      runsDir: 'features/<featureId>/runs',
+      prd: 'features/<featureId>/prd.json',
+      taskPlan: 'features/<featureId>/task-plan.json',
+      runState: 'features/<featureId>/run-state.json',
+      taskContext: 'features/<featureId>/runs/<taskId>/task-context.json',
+    },
+    defaults: {
+      agentAdapter: 'codex',
+      runtimeMode: 'check',
+      checksMode: 'real',
+    },
+    commands: {
+      initFeature: 'sk init-feature --project-dir . --feature-id <featureId> --name <功能名称> --summary <功能摘要>',
+      approveFeature: 'sk init-feature --project-dir . --feature-id <featureId> --name <功能名称> --summary <功能摘要> --approve --by human',
+      run: 'sk run --project-dir . --feature-id <featureId> --runtime-mode check --checks-mode real',
+      status: 'sk status --project-dir . --feature-id <featureId>',
+      retry: 'sk retry --project-dir . --feature-id <featureId> --task-id <taskId> --by human --reason <原因>',
+      cancel: 'sk cancel --project-dir . --feature-id <featureId> --task-id <taskId> --by human --reason <原因>',
+    },
+    bases: (project.bases ?? []).map((base) => ({
+      baseId: base.baseId,
+      templateId: base.templateId,
+      repo: base.repo,
+      workspace: toProjectRelative(projectDir, base.workspace),
+    })),
+    aiEditorRules: [
+      '先读取 ENGINE.md 和 project.json。',
+      '基于 prd.json、task-plan.json、run-state.json 判断当前任务。',
+      '按 task.requiredSkillId 对应 skill 执行。',
+      '不要修改 allowedPaths 外的文件。',
+      '不要手动篡改 run-state 或运行产物。',
+    ],
+  };
+}
+
+function writeProjectConventions(project, projectDir, force) {
+  const guidePath = path.join(projectDir, 'ENGINE.md');
+  const workspacePath = path.join(projectDir, '.engine-workspace.json');
+  writeFileIfAllowed(guidePath, `${renderEngineMarkdown(project, projectDir)}\n`, force);
+  writeFileIfAllowed(workspacePath, `${JSON.stringify(buildEngineWorkspace(project, projectDir), null, 2)}\n`, force);
+  return {
+    guidePath,
+    workspacePath,
+  };
+}
+
 function initProject(options) {
   const name = options.name ?? options._.join(' ');
   if (!name) throw new Error('缺少参数 --name，或在 init-project 后直接输入项目名称');
@@ -266,6 +412,8 @@ function initProject(options) {
   if (options.force) args.push('--force');
   const projectResult = runNode(args[0], args.slice(1), { quiet: true });
   const projectSummary = JSON.parse(projectResult.stdout);
+  const project = readJsonFile(out);
+  const conventionFiles = writeProjectConventions(project, path.dirname(out), options.force);
   const preparedBases = [];
   const shouldPrepareBases = !hasExplicitBases && !options['skip-bases'];
   if (shouldPrepareBases) {
@@ -275,6 +423,7 @@ function initProject(options) {
   console.log(JSON.stringify({
     ...projectSummary,
     projectDir: path.dirname(out),
+    conventionFiles,
     basesPrepared: shouldPrepareBases,
     preparedBases,
   }, null, 2));
