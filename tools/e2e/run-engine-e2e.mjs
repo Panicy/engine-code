@@ -1172,6 +1172,21 @@ function testEngineCliProjectDir(baseDir) {
 }
 
 function testEngineCliInitProjectNameOnly(baseDir) {
+  const projectsRoot = path.join(baseDir, 'engin-projects-by-name');
+  const defaultDirResult = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'init-project',
+    '示例项目',
+    '--projects-root', projectsRoot,
+    '--clone-mode', 'source-template',
+    '--force',
+  ]));
+  assert(defaultDirResult.ok === true, 'CLI init-project 未传 project-dir 时应成功');
+  assert(defaultDirResult.outputPath === path.join(projectsRoot, '示例项目', 'project.json'), '中文名称应作为默认项目目录名');
+  const defaultDirProject = readJson(defaultDirResult.outputPath);
+  assert(defaultDirProject.projectId.startsWith('project-'), '中文名称未提供 project-id 时应生成安全 projectId');
+  assert(!/^project-\d{14}$/.test(defaultDirProject.projectId), '中文名称生成的 projectId 不应退回时间戳随机值');
+
   const projectDir = path.join(baseDir, 'engin-projects', 'name-only-demo');
   const result = parseCommandJson(runNode([
     'tools/cli/engine.mjs',
@@ -1184,7 +1199,7 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   assert(result.ok === true, 'CLI init-project 仅输入名称应成功');
   assert(result.outputPath === path.join(projectDir, 'project.json'), '仅输入名称时应写入 project-dir/project.json');
   const project = readJson(result.outputPath);
-  assert(project.projectId.startsWith('project-'), '中文名称未提供 project-id 时应生成安全 projectId');
+  assert(project.projectId === defaultDirProject.projectId, '同一个中文名称应生成稳定 projectId');
   assert(project.name === '示例项目', '仅输入名称时应保留项目显示名称');
   assert(project.bases.length === 3, '未传 base/workspace 时应自动登记固定三端基座');
   assert(project.bases.map((base) => base.baseId).join(',') === 'backend,middle,client', '固定三端基座顺序应稳定');

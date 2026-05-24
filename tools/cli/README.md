@@ -5,7 +5,7 @@
 ## 设计边界
 
 - CLI 不绑定具体 Agent，`run` 命令通过 `--agent-adapter` 选择 `mock`、`shell`、`codex`、`external-agent` 等执行器。
-- CLI 不直接复制或改造基座项目，只把本地真实基座 workspace 写入 `project.json`。
+- CLI 只在项目初始化阶段准备固定基座 workspace，后续开发由 JSON、skill 和 Run Loop 驱动。
 - CLI 不绕过人工确认，`init-feature --approve --by human` 只是调用既有确认入口写入确认记录。
 - CLI 不新增单独任务 JSON，任务仍然来自 `task-plan.json`，并按任务绑定的 skill 执行。
 
@@ -15,7 +15,7 @@
 sk init-project 示例项目
 ```
 
-如果不传 `--project-id`，CLI 会自动生成一个安全 ID。如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../engin-projects/<project-id>/project.json`。不传三端路径时，会自动 clone 固定三端基座到项目目录下的 `bases/backend`、`bases/middle`、`bases/client`。
+如果不传 `--project-id`，CLI 会根据名称生成一个稳定安全 ID。如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../engin-projects/<项目名称>/project.json`。不传三端路径时，会自动 clone 固定三端基座到项目目录下的 `bases/backend`、`bases/middle`、`bases/client`。
 
 调试时可以跳过基座准备：
 

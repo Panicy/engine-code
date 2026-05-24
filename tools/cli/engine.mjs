@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -80,17 +81,24 @@ function requireOption(options, key) {
   if (!options[key]) throw new Error(`缺少参数 --${key}`);
 }
 
-function compactTimestamp() {
-  return new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
-}
-
 function slugifyProjectName(name) {
+  const source = String(name ?? '').trim();
   const slug = String(name ?? '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return slug || `project-${compactTimestamp()}`;
+  if (slug) return slug;
+  const hash = crypto.createHash('sha1').update(source).digest('hex').slice(0, 10);
+  return `project-${hash}`;
+}
+
+function projectDirectoryName(name) {
+  return String(name ?? '')
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]+/g, '-')
+    .replace(/^\.+$/, '')
+    .replace(/^-+|-+$/g, '') || slugifyProjectName(name);
 }
 
 function runNode(script, args, options = {}) {
@@ -196,8 +204,8 @@ function initProject(options) {
   const name = options.name ?? options._.join(' ');
   if (!name) throw new Error('缺少参数 --name，或在 init-project 后直接输入项目名称');
   const projectId = options['project-id'] ?? slugifyProjectName(name);
-  const out = options.out ?? defaultProjectPath(projectId, options);
-  const root = projectRoot(projectId, { ...options, 'project-dir': options['project-dir'] ?? path.dirname(out) });
+  const root = options['project-dir'] ?? (options.out ? path.dirname(options.out) : path.join(options['projects-root'] ?? defaultProjectsRoot, projectDirectoryName(name)));
+  const out = options.out ?? path.join(root, 'project.json');
   const bases = [...(options.base ?? [])];
   const hasExplicitBases = (options.base ?? []).length > 0 || Boolean(options.backend || options.middle || options.client);
   if (!hasExplicitBases) {
