@@ -211,26 +211,41 @@ function summarizeItems(title, items, render) {
   return [`${title}:`, ...items.map(render)];
 }
 
-function taskTitle(story, taskType) {
+function taskTitle(story, taskType, entity = null) {
   const label = {
     backend: '后端实现',
     middle: '中台实现',
     client: '客户端实现',
   }[taskType] ?? '实现';
-  return `${story.title}${label}`;
+  return entity ? `${story.title}${entity.name}${label}` : `${story.title}${label}`;
 }
 
-function taskScope(story, taskType, prd) {
+function selectedDataEntities(prd, entity = null) {
+  return entity ? [entity] : (prd.dataEntities ?? []);
+}
+
+function selectedPermissions(prd, entity = null) {
+  if (!entity) return prd.permissions ?? [];
+  const entityText = [entity.id, entity.name, ...(entity.fields ?? []).map((field) => field.name)].join(' ').toLowerCase();
+  return (prd.permissions ?? []).filter((permission) => {
+    const permissionText = [permission.code, permission.name, permission.description ?? ''].join(' ').toLowerCase();
+    return permissionText.includes(entity.name.toLowerCase()) || entityText.split(/\s+/).some((part) => part && permissionText.includes(part));
+  });
+}
+
+function taskScope(story, taskType, prd, entity = null) {
   const commonOutOfScope = ['不修改 PRD 未确认的需求边界', '不处理当前用户故事之外的额外功能'];
   const rules = summarizeItems('业务规则', prd.businessRules, (item) => `${item.id} ${item.text}`);
-  const entities = summarizeItems('数据对象', prd.dataEntities, (entity) => {
-    const fields = (entity.fields ?? []).map((field) => `${field.name}:${field.type}${field.required ? ':required' : ''}`).join(', ');
-    return `${entity.id} ${entity.name} - ${entity.description}${fields ? ` (${fields})` : ''}`;
+  const entities = summarizeItems('数据对象', selectedDataEntities(prd, entity), (item) => {
+    const fields = (item.fields ?? []).map((field) => `${field.name}:${field.type}${field.required ? ':required' : ''}`).join(', ');
+    return `${item.id} ${item.name} - ${item.description}${fields ? ` (${fields})` : ''}`;
   });
-  const permissions = summarizeItems('权限要求', prd.permissions, (item) => `${item.code} ${item.name}`);
+  const permissions = summarizeItems('权限要求', selectedPermissions(prd, entity), (item) => `${item.code} ${item.name}`);
   if (taskType === 'backend') {
     return {
-      summary: `围绕用户故事“${story.title}”完成后端接口、权限、数据和必要 SQL。`,
+      summary: entity
+        ? `围绕用户故事“${story.title}”完成“${entity.name}”后端接口、权限、数据和必要 SQL。`
+        : `围绕用户故事“${story.title}”完成后端接口、权限、数据和必要 SQL。`,
       inScope: ['后端接口', '业务校验', '权限标识', '必要数据库变更', '接口连通性自查', ...entities, ...rules, ...permissions],
       outOfScope: ['中台页面', '客户端页面', ...commonOutOfScope],
     };
@@ -256,26 +271,26 @@ function buildHumanNotes(prd) {
   return [...assumptions, ...openQuestions, ...risks].join('\n');
 }
 
-function buildTask({ id, story, base, templateInfo, dependencyIds, prd, requirements }) {
+function buildTask({ id, story, base, templateInfo, dependencyIds, prd, requirements, entity = null }) {
   const taskType = defaultTaskTypeByTemplate[base.templateId] ?? templateInfo.template.type;
   const skillId = findSkill(templateInfo.registry, base.templateId, taskType);
   return {
     id,
-    title: taskTitle(story, taskType),
+    title: taskTitle(story, taskType, taskType === 'backend' ? entity : null),
     type: taskType,
     sourceStoryIds: [story.id],
     targetBaseId: base.baseId,
     dependsOn: dependencyIds,
     requiredSkillId: skillId,
-    scope: taskScope(story, taskType, prd),
+    scope: taskScope(story, taskType, prd, taskType === 'backend' ? entity : null),
     allowedPaths: allowedPathsForSkill(templateInfo.registry, skillId, templateInfo.template),
     expectedChangedFiles: [],
     acceptanceCriteria: story.acceptanceCriteria,
     checks: checksForBase(templateInfo.template, base.baseId, requirements),
     contextBudget: {
-      size: 'm',
-      maxFiles: taskType === 'backend' ? 16 : 12,
-      maxEstimatedMinutes: 60,
+      size: entity ? 's' : 'm',
+      maxFiles: taskType === 'backend' ? (entity ? 10 : 16) : 12,
+      maxEstimatedMinutes: taskType === 'backend' && entity ? 35 : 60,
     },
     retryPolicy: {
       maxAttempts: 3,
@@ -343,7 +358,7 @@ function buildTaskPlan(args) {
 
   const storyGroups = (prd.userStories ?? []).map((story) => {
     const tasks = [];
-    let backendTaskId = null;
+    const backendTaskIds = [];
     const storyDependencyIds = (story.dependencies ?? [])
       .map((storyId) => storyTerminalTaskIds.get(storyId))
       .filter(Boolean);
@@ -361,17 +376,20 @@ function buildTaskPlan(args) {
         tasks.push(buildSchemaTask({ id: schemaTaskId, story, base, templateInfo, prd, requirements, dependencyIds: storyDependencyIds }));
       }
 
-      const taskId = `TASK-${String(taskCounter).padStart(3, '0')}`;
-      taskCounter += 1;
+      const backendEntities = taskType === 'backend' && (prd.dataEntities ?? []).length > 1 ? prd.dataEntities : [null];
       const dependencyIds = [];
       if (schemaTaskId) dependencyIds.push(schemaTaskId);
       if (!schemaTaskId && taskType === 'backend') dependencyIds.push(...storyDependencyIds);
-      if ((taskType === 'middle' || taskType === 'client') && backendTaskId) dependencyIds.push(backendTaskId);
-      if ((taskType === 'middle' || taskType === 'client') && !backendTaskId) dependencyIds.push(...storyDependencyIds);
+      if ((taskType === 'middle' || taskType === 'client') && backendTaskIds.length > 0) dependencyIds.push(...backendTaskIds);
+      if ((taskType === 'middle' || taskType === 'client') && backendTaskIds.length === 0) dependencyIds.push(...storyDependencyIds);
 
-      const task = buildTask({ id: taskId, story, base, templateInfo, dependencyIds, prd, requirements });
-      if (taskType === 'backend') backendTaskId = taskId;
-      tasks.push(task);
+      for (const entity of backendEntities) {
+        const taskId = `TASK-${String(taskCounter).padStart(3, '0')}`;
+        taskCounter += 1;
+        const task = buildTask({ id: taskId, story, base, templateInfo, dependencyIds, prd, requirements, entity });
+        if (taskType === 'backend') backendTaskIds.push(taskId);
+        tasks.push(task);
+      }
     }
     if (tasks.length > 0) storyTerminalTaskIds.set(story.id, tasks.at(-1).id);
 

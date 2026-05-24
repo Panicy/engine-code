@@ -8,8 +8,9 @@ Task Planner 用于从已确认的 `prd.json` 生成 `task-plan.json` 草稿。�
 - 按 `prd.userStories[]` 生成 `storyGroups[]`。
 - 按 `prd.impactedBaseIds[]` 或 `--bases` 生成每个 story 下的多端任务。
 - 根据 base 的 `templateId` 选择默认 skill。
-- 中台和客户端任务默认依赖同 story 下的后端任务。
+- 中台和客户端任务默认依赖同 story 下的所有后端任务。
 - 如果 PRD 存在 `dataEntities[]`，会先生成后端 schema/database task。
+- 如果 PRD 存在多个 `dataEntities[]`，后端 CRUD 会按实体拆成多个小任务。
 - PRD 的 businessRules/dataEntities/permissions 会进入 task scope。
 - PRD 的 assumptions/openQuestions/risks 会进入 task humanNotes。
 - `userStories[].dependencies` 会映射为跨 story task 依赖，并影响 run-state 的 pending/ready。
@@ -51,17 +52,30 @@ middle-starter  -> middle task  -> vben-table-form-page
 uniapp-template -> client task  -> uniapp-page-flow
 ```
 
-如果 PRD 存在 `dataEntities[]`：
+如果 PRD 存在 `dataEntities[]`，会先生成数据库 schema task：
 
 ```text
 backend-starter -> schema task -> ruoyi-database-migration
 backend task dependsOn schema task
 ```
 
+如果 PRD 存在多个 `dataEntities[]`，后端 CRUD 不再合并成一个大任务，而是按实体拆分：
+
+```text
+schema task
+  -> backend task: 微信应用
+  -> backend task: 相册分类
+  -> backend task: 相册素材
+
+middle/client task dependsOn 所有实体 backend task
+```
+
+实体后端任务只携带当前实体相关的 `dataEntities`、`permissions` 和较小的 `contextBudget`，避免真实 Agent 一次性修改过多文件导致超时、越界或审查失败。
+
 依赖规则：
 
 ```text
-middle/client task dependsOn 同 story 下的 backend task
+middle/client task dependsOn 同 story 下的所有 backend task
 后置 story 的入口 task dependsOn 前置 story 的终止 task
 ```
 

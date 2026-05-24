@@ -969,6 +969,82 @@ function testTaskPlannerRichPrdDependencies(baseDir) {
   assert(invalid.stderr.includes('依赖不存在的 storyId：US-999'), 'story.dependencies 引用不存在故事时应失败');
 }
 
+function testTaskPlannerSplitsBackendByDataEntity(baseDir) {
+  const requirementsPath = writeRichRequirements(baseDir, {
+    openQuestions: [
+      {
+        question: '是否拆分多个管理对象？',
+        status: 'answered',
+        answer: '按数据对象拆分后端任务。',
+      },
+    ],
+    dataEntities: [
+      {
+        name: '微信应用',
+        description: '小程序等微信应用配置。',
+        fields: [
+          { name: 'appName', type: 'string', required: true, description: '应用名称' },
+          { name: 'appId', type: 'string', required: true, description: 'AppId' },
+          { name: 'appSecret', type: 'string', required: true, description: 'AppSecret' },
+        ],
+      },
+      {
+        name: '相册分类',
+        description: '中台相册分类。',
+        fields: [
+          { name: 'categoryName', type: 'string', required: true, description: '分类名称' },
+        ],
+      },
+      {
+        name: '相册素材',
+        description: '上传后的图片素材。',
+        fields: [
+          { name: 'categoryId', type: 'number', required: true, description: '分类 ID' },
+          { name: 'url', type: 'string', required: true, description: '图片地址' },
+        ],
+      },
+    ],
+  });
+  const prdPath = createPrdFromRequirements(baseDir, 'requirements-backend-entity-split', requirementsPath);
+  parseCommandJson(runNode(['tools/prd-builder/approve-prd.mjs', '--prd', prdPath, '--by', 'e2e']));
+  const taskPlanPath = path.join(baseDir, 'requirements-backend-entity-split-task-plan.json');
+  const runStatePath = path.join(baseDir, 'requirements-backend-entity-split-run-state.json');
+  parseCommandJson(runNode([
+    'tools/task-planner/create-task-plan.mjs',
+    '--project', projectPath,
+    '--prd', prdPath,
+    '--out', taskPlanPath,
+    '--run-state-out', runStatePath,
+    '--requirements-file', requirementsPath,
+    '--force',
+  ]));
+  parseCommandJson(runNode([
+    'tools/task-planner/approve-task-plan.mjs',
+    '--project', projectPath,
+    '--prd', prdPath,
+    '--task-plan', taskPlanPath,
+    '--run-state', runStatePath,
+    '--by', 'e2e',
+  ]));
+  const taskPlan = readJson(taskPlanPath);
+  const firstStoryTasks = taskPlan.storyGroups[0].tasks;
+  assert(firstStoryTasks.map((task) => task.type).join(',') === 'schema,backend,backend,backend,middle,client', '多个 dataEntities 应拆出多个 backend task');
+  assert(firstStoryTasks.slice(1, 4).map((task) => task.title).join('|').includes('微信应用'), 'backend task 标题应包含实体名');
+  assert(firstStoryTasks.slice(1, 4).map((task) => task.title).join('|').includes('相册分类'), 'backend task 标题应包含相册分类');
+  assert(firstStoryTasks.slice(1, 4).map((task) => task.title).join('|').includes('相册素材'), 'backend task 标题应包含相册素材');
+  assert(firstStoryTasks.slice(1, 4).every((task) => task.dependsOn.join(',') === firstStoryTasks[0].id), '每个 backend entity task 应依赖 schema task');
+  assert(firstStoryTasks[4].dependsOn.join(',') === firstStoryTasks.slice(1, 4).map((task) => task.id).join(','), 'middle task 应依赖全部 backend entity task');
+  assert(firstStoryTasks[1].contextBudget.size === 's' && firstStoryTasks[1].contextBudget.maxEstimatedMinutes === 35, 'entity backend task 应使用更小 context budget');
+  const validation = validateFiles({
+    project: projectPath,
+    prd: prdPath,
+    'task-plan': taskPlanPath,
+    'run-state': runStatePath,
+    'templates-dir': templatesDir,
+  });
+  assert(validation.valid, `拆分后的 task-plan/run-state 应通过 Validator：${JSON.stringify(validation, null, 2)}`);
+}
+
 function testHappyPath(baseDir) {
   const paths = prepareApprovedFeature(baseDir, 'happy-path');
   const result = runLoop(paths, ['--agent-adapter', 'mock']);
@@ -2791,6 +2867,7 @@ const tests = [
   ['Skill task type 匹配校验', testSkillTaskTypeMismatch],
   ['PRD Builder requirements-file', testPrdBuilderRequirementsFile],
   ['Task Planner rich PRD dependencies', testTaskPlannerRichPrdDependencies],
+  ['Task Planner backend 按实体拆分', testTaskPlannerSplitsBackendByDataEntity],
   ['跨端契约校验', testContractsValidator],
   ['跨端契约 cwd 路径解析', testContractsValidatorCwd],
   ['Base Bootstrap ready/partial 判断', testBaseBootstrapReadyAndPartial],
