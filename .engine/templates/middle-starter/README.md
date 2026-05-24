@@ -26,12 +26,14 @@ pnpm install
 pnpm dev:antd
 ```
 
-推荐检查：
+可选检查：
 
 ```bash
 pnpm -F @vben/web-antd run typecheck
 pnpm lint
 ```
+
+说明：`typecheck` 是全量中台检查，可能受既有基线错误影响；默认不作为每个 middle task 的阻塞检查。
 
 ## 关键目录
 

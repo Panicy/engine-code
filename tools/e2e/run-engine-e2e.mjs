@@ -942,6 +942,7 @@ function testTaskPlannerRichPrdDependencies(baseDir) {
   const authDisabledCheck = firstStoryTasks[1].checks.find((check) => check.id === 'backend-notice-auth-disabled');
   assert(authDisabledCheck.http.teardownCommands.length === 1, 'auth_disabled 检查必须带 teardownCommands');
   assert(middleChecks.includes('middle-notice-static'), 'requirements checksByBase 应进入对应 base task checks');
+  assert(!middleChecks.includes('middle-typecheck'), 'middle task 不应从模板继承全量 typecheck 检查');
 
   const invalidDependencyRequirements = writeRichRequirements(baseDir, {
     userStories: [
@@ -1086,6 +1087,7 @@ function testEngineCliThinFlow(baseDir) {
   const middleTask = taskPlan.storyGroups[0].tasks.find((task) => task.type === 'middle');
   assert(backendTask.checks.some((check) => check.id === 'backend-notice-anonymous-401'), 'CLI requirements-file 应把 backendApiChecks 写入 backend checks');
   assert(middleTask.checks.some((check) => check.id === 'middle-notice-static'), 'CLI requirements-file 应把 checksByBase 写入 middle checks');
+  assert(!middleTask.checks.some((check) => check.id === 'middle-typecheck'), 'middle task 不应默认带全量 typecheck 阻塞检查');
 
   const runtimeResult = parseCommandJson(runNode([
     'tools/cli/engine.mjs',

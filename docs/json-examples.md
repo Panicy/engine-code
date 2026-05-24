@@ -315,16 +315,7 @@
               "verification": "启动中台并完成页面操作验证。"
             }
           ],
-          "checks": [
-            {
-              "id": "middle-typecheck",
-              "name": "中台类型检查",
-              "type": "typecheck",
-              "baseId": "middle",
-              "command": "pnpm typecheck",
-              "required": true
-            }
-          ],
+          "checks": [],
           "contextBudget": {
             "size": "m",
             "maxFiles": 10,

@@ -76,13 +76,5 @@
       "packages/**"
     ]
   },
-  "defaultChecks": [
-    {
-      "id": "middle-typecheck",
-      "name": "中台类型检查",
-      "type": "typecheck",
-      "command": "pnpm -F @vben/web-antd run typecheck",
-      "required": true
-    }
-  ]
+  "defaultChecks": []
 }

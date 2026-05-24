@@ -17,7 +17,7 @@
         { "step": 2, "instruction": "在对应业务域下创建 index.ts 和 model.d.ts。" },
         { "step": 3, "instruction": "使用 alovaInstance 封装 list/detail/add/update/remove/export 等函数。" },
         { "step": 4, "instruction": "确认后端正确路径不 404，未登录访问有 401/403 鉴权边界。" },
-        { "step": 5, "instruction": "同步页面调用方并运行 typecheck。" }
+        { "step": 5, "instruction": "同步页面调用方；如项目基线已确认干净，可选运行局部或全量类型检查。" }
       ],
       "qualityGates": [
         { "name": "类型", "expectation": "接口入参和返回值有明确 TypeScript 类型。" },
@@ -42,7 +42,7 @@
         { "step": 3, "instruction": "用 useVbenVxeGrid 实现列表、查询、分页和操作列。" },
         { "step": 4, "instruction": "用 useVbenModal 实现新增和编辑。" },
         { "step": 5, "instruction": "检查按钮 v-access:code 与 permission-manifest.json 一致。" },
-        { "step": 6, "instruction": "运行 typecheck 并记录检查结果。" }
+        { "step": 6, "instruction": "记录页面自查结果；如项目基线已确认干净，可选运行局部或全量类型检查。" }
       ],
       "qualityGates": [
         { "name": "权限", "expectation": "新增、编辑、删除、导出按钮使用 v-access:code。" },
