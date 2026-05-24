@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { validateSchema } from '../validator/validate-feature.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,6 +138,37 @@ function defaultProjectPath(projectId, options = {}) {
   return path.join(projectRoot(projectId, options), 'project.json');
 }
 
+function resolveRepoPath(filePath) {
+  return path.resolve(repoRoot, filePath);
+}
+
+function readJsonFile(filePath) {
+  const abs = resolveRepoPath(filePath);
+  return JSON.parse(fs.readFileSync(abs, 'utf8'));
+}
+
+function assertValidProjectFile(projectPath) {
+  const abs = resolveRepoPath(projectPath);
+  if (!fs.existsSync(abs)) {
+    throw new Error(`当前目录不是引擎项目：未找到 ${abs}。请先执行 sk init-project <项目名称>，或传入正确的 --project-dir/--project。`);
+  }
+  if (!fs.statSync(abs).isFile()) {
+    throw new Error(`当前目录不是引擎项目：${abs} 不是 project.json 文件。`);
+  }
+  let project;
+  try {
+    project = readJsonFile(projectPath);
+  } catch (error) {
+    throw new Error(`当前目录不是合法引擎项目：${abs} 不是有效 JSON。${error.message}`);
+  }
+  const schema = readJsonFile('schemas/project.schema.json');
+  const errors = validateSchema(project, schema, { file: projectPath, rootSchema: schema });
+  if (errors.length > 0) {
+    throw new Error(`当前目录不是合法引擎项目：${abs} 不符合 project.schema.json。\n${JSON.stringify(errors, null, 2)}`);
+  }
+  return project;
+}
+
 function featureDirFromProject(projectPath, featureId) {
   return path.join(path.dirname(projectPath), 'features', featureId);
 }
@@ -253,6 +285,7 @@ function initFeature(options) {
   requireOption(options, 'name');
   requireOption(options, 'summary');
   const project = inferProjectPath(options);
+  assertValidProjectFile(project);
   const outDir = options['out-dir'] ?? inferFeatureDir({ ...options, project });
   const args = [
     'tools/project-init/create-feature.mjs',

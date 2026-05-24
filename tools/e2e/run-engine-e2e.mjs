@@ -1171,6 +1171,21 @@ function testEngineCliProjectDir(baseDir) {
   assert(status.issues.length === 0, 'CLI status --project-dir 应可读取 feature 状态');
 }
 
+function testEngineCliInitFeatureRejectsMissingProject(baseDir) {
+  const missingProjectDir = path.join(baseDir, 'not-a-project');
+  fs.mkdirSync(missingProjectDir, { recursive: true });
+  const result = runNode([
+    'tools/cli/engine.mjs',
+    'init-feature',
+    '--project-dir', missingProjectDir,
+    '--feature-id', 'app-management',
+    '--name', '应用管理',
+    '--summary', '应用的新增、编辑、启停、查询和权限控制',
+  ], { expectFailure: true });
+  assert(result.stderr.includes('当前目录不是引擎项目'), 'init-feature 应前置判断 project-dir 是否为引擎项目');
+  assert(result.stderr.includes('sk init-project'), 'init-feature project-dir 错误应提示先初始化项目');
+}
+
 function testEngineCliInitProjectNameOnly(baseDir) {
   const projectsRoot = path.join(baseDir, 'engin-projects-by-name');
   const defaultDirResult = parseCommandJson(runNode([
@@ -2574,6 +2589,7 @@ const tests = [
   ['Engine CLI help', testEngineCliHelp],
   ['Engine CLI 薄流程', testEngineCliThinFlow],
   ['Engine CLI project-dir', testEngineCliProjectDir],
+  ['Engine CLI init-feature 拒绝非项目目录', testEngineCliInitFeatureRejectsMissingProject],
   ['Engine CLI init-project 仅输入名称', testEngineCliInitProjectNameOnly],
   ['Engine CLI real-test source-template', testEngineCliRealTestSourceTemplate],
   ['max-tasks 暂停流程', testMaxTasksPause],
