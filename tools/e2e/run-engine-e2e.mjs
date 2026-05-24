@@ -1119,6 +1119,58 @@ function testEngineCliThinFlow(baseDir) {
   assert(taskRun.attempts[0].skillContext?.enforced === true, 'CLI flow 应保留 skill context 强制执行标记');
 }
 
+function testEngineCliProjectDir(baseDir) {
+  const root = path.join(baseDir, 'engine-cli-project-dir');
+  const backendWorkspace = path.join(root, 'backend');
+  const projectDir = path.join(root, 'sk-projects', 'project-dir-demo');
+  initGitWorkspace(backendWorkspace, { 'README.md': 'backend workspace\n' });
+
+  const projectResult = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'init-project',
+    '--project-id', 'project-dir-demo',
+    '--name', 'Project Dir Demo',
+    '--project-dir', projectDir,
+    '--backend', backendWorkspace,
+    '--force',
+  ]));
+  assert(projectResult.ok === true, 'CLI init-project --project-dir 应成功');
+  assert(projectResult.outputPath === path.join(projectDir, 'project.json'), 'CLI init-project --project-dir 应写入指定目录 project.json');
+
+  const featureResult = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'init-feature',
+    '--project-dir', projectDir,
+    '--feature-id', 'backend-only-feature',
+    '--name', '后端功能',
+    '--summary', '验证 project-dir 默认 feature 输出路径',
+    '--bases', 'backend',
+    '--approve',
+    '--by', 'e2e',
+    '--force',
+  ]));
+  assert(featureResult.ok === true, 'CLI init-feature --project-dir 应成功');
+  assert(featureResult.prdPath === path.join(projectDir, 'features', 'backend-only-feature', 'prd.json'), 'CLI init-feature --project-dir 应写入默认 features 目录');
+
+  const runResult = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'run',
+    '--project-dir', projectDir,
+    '--feature-id', 'backend-only-feature',
+    '--agent-adapter', 'mock',
+    '--runtime-mode', 'mock',
+    '--checks-mode', 'mock',
+  ]));
+  assert(runResult.summary.status === 'complete', 'CLI run --project-dir 应完成任务');
+  const status = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'status',
+    '--project-dir', projectDir,
+    '--feature-id', 'backend-only-feature',
+  ]));
+  assert(status.issues.length === 0, 'CLI status --project-dir 应可读取 feature 状态');
+}
+
 function testEngineCliRealTestSourceTemplate() {
   const result = parseCommandJson(runNode([
     'tools/cli/engine.mjs',
@@ -2483,6 +2535,7 @@ const tests = [
   ['Runtime Runner CLI mock', testRuntimeRunnerCliMock],
   ['Engine CLI help', testEngineCliHelp],
   ['Engine CLI 薄流程', testEngineCliThinFlow],
+  ['Engine CLI project-dir', testEngineCliProjectDir],
   ['Engine CLI real-test source-template', testEngineCliRealTestSourceTemplate],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],

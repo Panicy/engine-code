@@ -15,14 +15,17 @@
 node tools/cli/engine.mjs init-project \
   --project-id demo \
   --name 示例项目 \
+  --project-dir ../sk-projects/demo \
   --backend /path/to/backend \
   --middle /path/to/middle \
   --client /path/to/client
 ```
 
+如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../sk-projects/<project-id>/project.json`。
+
 ```bash
 node tools/cli/engine.mjs init-feature \
-  --project .engine/projects/demo/project.json \
+  --project-dir ../sk-projects/demo \
   --feature-id app-management \
   --name 应用管理 \
   --summary 应用新增、编辑、上下架和列表查询 \
@@ -33,15 +36,15 @@ node tools/cli/engine.mjs init-feature \
 
 ```bash
 node tools/cli/engine.mjs runtime \
-  --project .engine/projects/demo/project.json \
-  --feature .engine/projects/demo/features/app-management \
+  --project-dir ../sk-projects/demo \
+  --feature-id app-management \
   --mode check
 ```
 
 ```bash
 node tools/cli/engine.mjs run \
-  --project .engine/projects/demo/project.json \
-  --feature .engine/projects/demo/features/app-management \
+  --project-dir ../sk-projects/demo \
+  --feature-id app-management \
   --agent-adapter shell \
   --shell-command "your-agent-command" \
   --runtime-mode check \
@@ -50,7 +53,8 @@ node tools/cli/engine.mjs run \
 
 ```bash
 node tools/cli/engine.mjs status \
-  --feature .engine/projects/demo/features/app-management
+  --project-dir ../sk-projects/demo \
+  --feature-id app-management
 ```
 
 ## 真实项目测试

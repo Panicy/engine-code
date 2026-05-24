@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../..');
+const defaultProjectsRoot = path.resolve(repoRoot, '..', 'sk-projects');
 
 const defaultBases = {
   backend: {
@@ -38,12 +39,12 @@ function usage() {
     '  cancel         取消 needs_human task',
     '',
     'Examples:',
-    '  engine init-project --project-id demo --name 示例 --backend /path/backend --middle /path/middle',
-    '  engine init-feature --project .engine/projects/demo/project.json --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
-    '  engine runtime --feature .engine/projects/demo/features/app --mode mock',
-    '  engine run --feature .engine/projects/demo/features/app --runtime-mode mock --checks-mode mock',
+    '  engine init-project --project-id demo --name 示例 --project-dir ../sk-projects/demo --backend /path/backend --middle /path/middle',
+    '  engine init-feature --project-dir ../sk-projects/demo --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
+    '  engine runtime --project-dir ../sk-projects/demo --feature-id app --mode mock',
+    '  engine run --project-dir ../sk-projects/demo --feature-id app --runtime-mode mock --checks-mode mock',
     '  MYSQL_PWD=romantic. engine real-test --mysql-command /usr/local/mysql/bin/mysql --mysql-user root --mysql-password-env MYSQL_PWD --database aitest --redis-url redis://default:root123@127.0.0.1:6379',
-    '  engine status --feature .engine/projects/demo/features/app',
+    '  engine status --project-dir ../sk-projects/demo --feature-id app',
   ].join('\n');
 }
 
@@ -89,12 +90,13 @@ function runNode(script, args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-function projectRoot(projectId) {
-  return path.join('.engine', 'projects', projectId);
+function projectRoot(projectId, options = {}) {
+  if (options['project-dir']) return options['project-dir'];
+  return path.join(options['projects-root'] ?? defaultProjectsRoot, projectId);
 }
 
-function defaultProjectPath(projectId) {
-  return path.join(projectRoot(projectId), 'project.json');
+function defaultProjectPath(projectId, options = {}) {
+  return path.join(projectRoot(projectId, options), 'project.json');
 }
 
 function featureDirFromProject(projectPath, featureId) {
@@ -103,8 +105,9 @@ function featureDirFromProject(projectPath, featureId) {
 
 function inferProjectPath(options) {
   if (options.project) return options.project;
-  if (options['project-id']) return defaultProjectPath(options['project-id']);
-  throw new Error('缺少 --project 或 --project-id');
+  if (options['project-dir']) return path.join(options['project-dir'], 'project.json');
+  if (options['project-id']) return defaultProjectPath(options['project-id'], options);
+  throw new Error('缺少 --project、--project-dir 或 --project-id');
 }
 
 function inferFeatureDir(options) {
@@ -124,7 +127,7 @@ function featureFiles(featureDir) {
 function initProject(options) {
   requireOption(options, 'project-id');
   requireOption(options, 'name');
-  const out = options.out ?? defaultProjectPath(options['project-id']);
+  const out = options.out ?? defaultProjectPath(options['project-id'], options);
   const bases = [...(options.base ?? [])];
   for (const baseId of ['backend', 'middle', 'client']) {
     if (!options[baseId]) continue;
