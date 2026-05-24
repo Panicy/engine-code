@@ -2092,6 +2092,11 @@ if (mode === 'write-out-of-scope') {
 if (mode === 'fake-changed-files') {
   console.log(JSON.stringify({ changedFiles: ['unsafe/from-codex.txt'] }));
 }
+if (mode === 'readonly-word-safe') {
+  fs.mkdirSync('src/pages/notice', { recursive: true });
+  fs.writeFileSync('src/pages/notice/index.vue', 'after\\\\n');
+  console.log('我会只读取 task-plan，然后继续写入允许路径。');
+}
 if (mode === 'fail') {
   console.error('fake codex failed');
   process.exit(7);
@@ -2207,6 +2212,15 @@ function testCodexAdapterReadOnlyOutputNeedsHuman(baseDir) {
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   assert(taskRun.attempts[0].summary.includes('不可写'), '只读环境应写入明确 summary');
   assert(taskRun.attempts[0].errors.includes('codex adapter write blocked'), '只读环境应记录 write blocked error');
+}
+
+function testCodexAdapterReadonlyWordDoesNotFalsePositive(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-readonly-word-safe', { 'src/pages/notice/index.vue': 'before\n' });
+  setFirstTaskAllowedPaths(paths, ['src/pages/notice/**']);
+  const result = runLoop(paths, codexArgs(fakeCodex, 'readonly-word-safe'));
+  assert(result.summary.taskSummary.done.includes('TASK-001'), '只读取这类普通语义不应误判为只读环境');
+  assert(firstAttemptChangedFiles(paths).join(',') === 'src/pages/notice/index.vue', '普通只读取语义下真实改动应正常通过');
 }
 
 function testCodexAdapterAllowedPathPass(baseDir) {
@@ -2835,6 +2849,7 @@ const tests = [
   ['Codex Adapter exec prompt 形态', testCodexAdapterExecPromptShape],
   ['Codex Adapter 默认 exec 子命令', testCodexAdapterDefaultsToExec],
   ['Codex Adapter 只读输出进入 needs_human', testCodexAdapterReadOnlyOutputNeedsHuman],
+  ['Codex Adapter 只读取语义不误判', testCodexAdapterReadonlyWordDoesNotFalsePositive],
   ['Codex Adapter fake 修改允许路径', testCodexAdapterAllowedPathPass],
   ['Codex Adapter fake 修改越界路径', testCodexAdapterOutOfScopeReviewFail],
   ['Codex Adapter 忽略伪造 changedFiles', testCodexAdapterIgnoresFakeChangedFiles],
