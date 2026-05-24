@@ -1171,6 +1171,25 @@ function testEngineCliProjectDir(baseDir) {
   assert(status.issues.length === 0, 'CLI status --project-dir 应可读取 feature 状态');
 }
 
+function testEngineCliInitProjectNameOnly(baseDir) {
+  const projectDir = path.join(baseDir, 'engin-projects', 'name-only-demo');
+  const result = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'init-project',
+    '示例项目',
+    '--project-dir', projectDir,
+    '--force',
+  ]));
+  assert(result.ok === true, 'CLI init-project 仅输入名称应成功');
+  assert(result.outputPath === path.join(projectDir, 'project.json'), '仅输入名称时应写入 project-dir/project.json');
+  const project = readJson(result.outputPath);
+  assert(project.projectId.startsWith('project-'), '中文名称未提供 project-id 时应生成安全 projectId');
+  assert(project.name === '示例项目', '仅输入名称时应保留项目显示名称');
+  assert(project.bases.length === 3, '未传 base/workspace 时应自动登记固定三端基座');
+  assert(project.bases.map((base) => base.baseId).join(',') === 'backend,middle,client', '固定三端基座顺序应稳定');
+  assert(project.bases.every((base) => base.workspace.startsWith(path.join(projectDir, 'bases'))), '默认 workspace 应预留在项目目录 bases 下');
+}
+
 function testEngineCliRealTestSourceTemplate() {
   const result = parseCommandJson(runNode([
     'tools/cli/engine.mjs',
@@ -2536,6 +2555,7 @@ const tests = [
   ['Engine CLI help', testEngineCliHelp],
   ['Engine CLI 薄流程', testEngineCliThinFlow],
   ['Engine CLI project-dir', testEngineCliProjectDir],
+  ['Engine CLI init-project 仅输入名称', testEngineCliInitProjectNameOnly],
   ['Engine CLI real-test source-template', testEngineCliRealTestSourceTemplate],
   ['max-tasks 暂停流程', testMaxTasksPause],
   ['检查失败复跑 attempts', testCheckFailureRetry],

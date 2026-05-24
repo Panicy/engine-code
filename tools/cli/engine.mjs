@@ -39,7 +39,7 @@ function usage() {
     '  cancel         取消 needs_human task',
     '',
     'Examples:',
-    '  sk init-project --project-id demo --name 示例 --project-dir ../engin-projects/demo --backend /path/backend --middle /path/middle',
+    '  sk init-project 示例项目',
     '  sk init-feature --project-dir ../engin-projects/demo --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
     '  sk runtime --project-dir ../engin-projects/demo --feature-id app --mode mock',
     '  sk run --project-dir ../engin-projects/demo --feature-id app --runtime-mode mock --checks-mode mock',
@@ -77,6 +77,19 @@ function parseOptions(argv) {
 
 function requireOption(options, key) {
   if (!options[key]) throw new Error(`缺少参数 --${key}`);
+}
+
+function compactTimestamp() {
+  return new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
+}
+
+function slugifyProjectName(name) {
+  const slug = String(name ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug || `project-${compactTimestamp()}`;
 }
 
 function runNode(script, args) {
@@ -125,24 +138,36 @@ function featureFiles(featureDir) {
 }
 
 function initProject(options) {
-  requireOption(options, 'project-id');
-  requireOption(options, 'name');
-  const out = options.out ?? defaultProjectPath(options['project-id'], options);
+  const name = options.name ?? options._.join(' ');
+  if (!name) throw new Error('缺少参数 --name，或在 init-project 后直接输入项目名称');
+  const projectId = options['project-id'] ?? slugifyProjectName(name);
+  const out = options.out ?? defaultProjectPath(projectId, options);
+  const root = projectRoot(projectId, { ...options, 'project-dir': options['project-dir'] ?? path.dirname(out) });
   const bases = [...(options.base ?? [])];
-  for (const baseId of ['backend', 'middle', 'client']) {
-    if (!options[baseId]) continue;
-    const defaults = defaultBases[baseId];
-    bases.push(`${baseId}:${defaults.templateId}:${defaults.repo}:${options[baseId]}`);
+  const hasExplicitBases = (options.base ?? []).length > 0 || Boolean(options.backend || options.middle || options.client);
+  if (!hasExplicitBases) {
+    for (const baseId of ['backend', 'middle', 'client']) {
+      const defaults = defaultBases[baseId];
+      bases.push(`${baseId}:${defaults.templateId}:${defaults.repo}:${path.join(root, 'bases', baseId)}`);
+    }
+  } else {
+    for (const baseId of ['backend', 'middle', 'client']) {
+      if (!options[baseId]) continue;
+      const defaults = defaultBases[baseId];
+      bases.push(`${baseId}:${defaults.templateId}:${defaults.repo}:${options[baseId]}`);
+    }
   }
-  if (bases.length === 0) throw new Error('至少提供一个 --base，或使用 --backend/--middle/--client 指定 workspace');
   const args = [
     'tools/project-init/create-project.mjs',
-    '--project-id', options['project-id'],
-    '--name', options.name,
+    '--project-id', projectId,
+    '--name', name,
     '--out', out,
   ];
   if (options.description) args.push('--description', options.description);
   for (const base of bases) args.push('--base', base);
+  if (!hasExplicitBases) {
+    args.push('--allow-missing-workspace');
+  }
   if (options.force) args.push('--force');
   runNode(args[0], args.slice(1));
 }

@@ -19,6 +19,7 @@ function usage() {
     '可选：',
     '  --description <项目说明>',
     '  --base 可重复传入多个',
+    '  --allow-missing-workspace',
     '  --force',
   ].join('\n');
 }
@@ -31,8 +32,8 @@ function parseArgs(argv) {
       args.help = true;
       continue;
     }
-    if (arg === '--force') {
-      args.force = true;
+    if (arg === '--force' || arg === '--allow-missing-workspace') {
+      args[arg.slice(2)] = true;
       continue;
     }
     if (!arg.startsWith('--')) throw new Error(`未知参数：${arg}`);
@@ -73,7 +74,7 @@ function assertWorkspaceExists(workspace) {
   }
 }
 
-function parseBase(value) {
+function parseBase(value, options = {}) {
   const parts = value.split(':');
   if (parts.length < 4) {
     throw new Error(`--base 格式应为 baseId:templateId:repo:workspace：${value}`);
@@ -86,7 +87,7 @@ function parseBase(value) {
   }
   assertValidUri(repo);
   assertTemplateExists(templateId);
-  assertWorkspaceExists(workspace);
+  if (options.allowMissingWorkspace !== true) assertWorkspaceExists(workspace);
   return {
     baseId,
     templateId,
@@ -112,7 +113,9 @@ function buildProject(args) {
   requireArg(args, 'out');
   if (args.base.length === 0) throw new Error('至少需要一个 --base');
 
-  const bases = args.base.map(parseBase);
+  const bases = args.base.map((base) => parseBase(base, {
+    allowMissingWorkspace: args['allow-missing-workspace'] === true,
+  }));
   const seenBaseIds = new Set();
   const duplicatedBaseIds = [];
   for (const base of bases) {
