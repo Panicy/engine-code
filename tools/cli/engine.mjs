@@ -66,7 +66,8 @@ function parseOptions(argv) {
       continue;
     }
     const value = argv[i + 1];
-    if (!value || value.startsWith('--')) throw new Error(`参数 ${arg} 缺少值`);
+    const allowsDashedValue = ['codex-extra-arg', 'external-agent-extra-arg'].includes(key);
+    if (!value || (!allowsDashedValue && value.startsWith('--'))) throw new Error(`参数 ${arg} 缺少值`);
     if (key === 'base') {
       options.base = [...(options.base ?? []), value];
     } else if (['codex-extra-arg', 'external-agent-extra-arg'].includes(key)) {

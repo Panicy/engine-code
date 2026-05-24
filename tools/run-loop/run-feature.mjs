@@ -83,8 +83,9 @@ function parseArgs(argv) {
     const key = arg.slice(2);
     if (!allowedKeys.has(key)) throw new Error(`未知参数：${arg}`);
     const value = argv[i + 1];
-    if (!value || (!['codex-extra-arg', 'external-agent-extra-arg'].includes(key) && value.startsWith('--'))) throw new Error(`参数 ${arg} 缺少值`);
-    if (['codex-extra-arg', 'external-agent-extra-arg'].includes(key)) {
+    const allowsDashedValue = ['codex-extra-arg', 'external-agent-extra-arg'].includes(key);
+    if (!value || (!allowsDashedValue && value.startsWith('--'))) throw new Error(`参数 ${arg} 缺少值`);
+    if (allowsDashedValue) {
       args[key] = [...(args[key] ?? []), value];
     } else {
       args[key] = value;
@@ -525,6 +526,22 @@ function normalizeOutcomeWithChangedFiles({ outcome, adapterId, changedFiles, ar
   };
 }
 
+function normalizeWriteBlockedOutcomeWithChangedFiles({ outcome, adapterId, changedFiles }) {
+  if (outcome.requestedStatus !== 'needs_human') return outcome;
+  if (changedFiles.length === 0) return outcome;
+  if (!(outcome.errors ?? []).includes(`${adapterId} adapter write blocked`)) return outcome;
+  return {
+    ...outcome,
+    requestedStatus: 'done',
+    taskRunStatus: 'passed',
+    reviewVerdict: 'pass',
+    source: outcome.source ?? 'executor',
+    summary: `${adapterId} adapter 输出包含只读提示，但 git diff 已采集到真实变更；继续进入检查与评审。`,
+    errors: (outcome.errors ?? []).filter((error) => error !== `${adapterId} adapter write blocked`),
+    nextActions: [],
+  };
+}
+
 function artifactPath(featureDir, taskId, fileName) {
   return path.join(featureDir, 'runs', taskId, fileName);
 }
@@ -765,7 +782,8 @@ async function runLoop(args) {
         recordOutcomeArtifacts(runState, outcome);
         const afterGitSnapshot = collectGitDiffSnapshot(taskContext.base.workspaceAbs);
         const changedFiles = changedFilesBetweenSnapshots(beforeGitSnapshot, afterGitSnapshot);
-        const changeAwareOutcome = normalizeOutcomeWithChangedFiles({ outcome, adapterId: adapter.id, changedFiles, args });
+        const writeAwareOutcome = normalizeWriteBlockedOutcomeWithChangedFiles({ outcome, adapterId: adapter.id, changedFiles });
+        const changeAwareOutcome = normalizeOutcomeWithChangedFiles({ outcome: writeAwareOutcome, adapterId: adapter.id, changedFiles, args });
         const checkResult = runChecks(task, {
           mode: checksMode,
           cwd: taskContext.base.workspaceAbs,

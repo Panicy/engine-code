@@ -28,7 +28,7 @@ function indicatesWriteBlocked(output) {
   return [
     /sandbox:\s*read-?only/i,
     /read-?only\s+(?:file\s+)?system/i,
-    /只读(?:环境|文件系统|目录|模式|sandbox)/,
+    /只读(?:文件系统|目录|模式|sandbox)/,
     /环境只读/,
     /无法写(?:入|文件)?/,
     /不能写(?:入|文件)?/,

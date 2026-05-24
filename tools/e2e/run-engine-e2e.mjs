@@ -1277,6 +1277,31 @@ function testEngineCliRunRequiresExplicitAgentForRealModes(baseDir) {
   assert(result.stderr.includes('--agent-adapter codex'), '错误提示应说明可用真实 agent adapter');
 }
 
+function testEngineCliRunAllowsDashedAgentExtraArgs(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'cli-codex-dashed-extra-arg', { 'src/pages/notice/index.vue': 'before\n' });
+  setFirstTaskAllowedPaths(paths, ['src/pages/notice/**']);
+  const result = parseCommandJson(runNode([
+    'tools/cli/engine.mjs',
+    'run',
+    '--project', paths.projectPath,
+    '--feature-id', 'cli-codex-dashed-extra-arg',
+    '--prd', paths.prd,
+    '--task-plan', paths.taskPlan,
+    '--run-state', paths.runState,
+    '--agent-adapter', 'codex',
+    '--codex-command', fakeCodex,
+    '--codex-extra-arg', 'exec',
+    '--codex-extra-arg', '--fake-mode',
+    '--codex-extra-arg', 'write-allowed',
+    '--codex-extra-arg', '--sandbox',
+    '--codex-extra-arg', 'workspace-write',
+    '--checks-mode', 'mock',
+    '--max-tasks', '1',
+  ]));
+  assert(result.summary.taskSummary.done.includes('TASK-001'), 'CLI run 应允许 --codex-extra-arg 接收 --sandbox 这类 dashed 值');
+}
+
 function testEngineCliInitProjectNameOnly(baseDir) {
   const projectsRoot = path.join(baseDir, 'engin-projects-by-name');
   const defaultDirResult = parseCommandJson(runNode([
@@ -2181,6 +2206,11 @@ if (mode === 'read-only') {
   console.log('sandbox: read-only');
   console.log('环境只读，无法写文件');
 }
+if (mode === 'read-only-with-write') {
+  fs.mkdirSync('src/pages/notice', { recursive: true });
+  fs.writeFileSync('src/pages/notice/index.vue', 'after\\\\n');
+  console.log('sandbox: read-only');
+}
 if (mode === 'timeout') {
   setTimeout(() => {}, 5000);
 } else {
@@ -2288,6 +2318,17 @@ function testCodexAdapterReadOnlyOutputNeedsHuman(baseDir) {
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   assert(taskRun.attempts[0].summary.includes('不可写'), '只读环境应写入明确 summary');
   assert(taskRun.attempts[0].errors.includes('codex adapter write blocked'), '只读环境应记录 write blocked error');
+}
+
+function testCodexAdapterReadOnlyOutputWithChangesPasses(baseDir) {
+  const fakeCodex = writeFakeCodex(baseDir);
+  const paths = prepareGitDiffFeature(baseDir, 'codex-read-only-output-with-changes', { 'src/pages/notice/index.vue': 'before\n' });
+  setFirstTaskAllowedPaths(paths, ['src/pages/notice/**']);
+  const result = runLoop(paths, codexArgs(fakeCodex, 'read-only-with-write'));
+  assert(result.summary.taskSummary.done.includes('TASK-001'), '只读提示但真实产生允许路径变更时应继续通过');
+  assert(firstAttemptChangedFiles(paths).join(',') === 'src/pages/notice/index.vue', '只读提示下真实变更仍应由 git diff 采集');
+  const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
+  assert(!taskRun.attempts[0].errors.includes('codex adapter write blocked'), '真实写入后不应保留 write blocked error');
 }
 
 function testCodexAdapterReadonlyWordDoesNotFalsePositive(baseDir) {
@@ -2893,6 +2934,7 @@ const tests = [
   ['Engine CLI project-dir', testEngineCliProjectDir],
   ['Engine CLI init-feature 拒绝非项目目录', testEngineCliInitFeatureRejectsMissingProject],
   ['Engine CLI real/check 要求显式 agent', testEngineCliRunRequiresExplicitAgentForRealModes],
+  ['Engine CLI run 允许 dashed extra args', testEngineCliRunAllowsDashedAgentExtraArgs],
   ['Engine CLI init-project 仅输入名称', testEngineCliInitProjectNameOnly],
   ['Engine CLI real-test source-template', testEngineCliRealTestSourceTemplate],
   ['max-tasks 暂停流程', testMaxTasksPause],
@@ -2926,6 +2968,7 @@ const tests = [
   ['Codex Adapter exec prompt 形态', testCodexAdapterExecPromptShape],
   ['Codex Adapter 默认 exec 子命令', testCodexAdapterDefaultsToExec],
   ['Codex Adapter 只读输出进入 needs_human', testCodexAdapterReadOnlyOutputNeedsHuman],
+  ['Codex Adapter 只读提示但真实写入通过', testCodexAdapterReadOnlyOutputWithChangesPasses],
   ['Codex Adapter 只读取语义不误判', testCodexAdapterReadonlyWordDoesNotFalsePositive],
   ['Codex Adapter fake 修改允许路径', testCodexAdapterAllowedPathPass],
   ['Codex Adapter fake 修改越界路径', testCodexAdapterOutOfScopeReviewFail],
