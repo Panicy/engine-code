@@ -1205,11 +1205,16 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   const defaultDirWorkspace = readJson(defaultDirResult.conventionFiles.workspacePath);
   assert(defaultDirProject.projectId.startsWith('project-'), '中文名称未提供 project-id 时应生成安全 projectId');
   assert(!/^project-\d{14}$/.test(defaultDirProject.projectId), '中文名称生成的 projectId 不应退回时间戳随机值');
+  assert(defaultDirGuide.includes('当用户提出新需求时'), 'ENGINE.md 应包含新需求入口约定');
+  assert(defaultDirGuide.includes('用户自然语言需求'), 'ENGINE.md 应说明自然语言需求必须进入 PRD 流程');
+  assert(defaultDirGuide.includes('PRD 未经人工确认前'), 'ENGINE.md 应限制 PRD 确认前不能开发');
   assert(defaultDirGuide.includes('AI 编辑器规则'), 'ENGINE.md 应包含 AI 编辑器协作规则');
   assert(defaultDirGuide.includes('sk run --project-dir .'), 'ENGINE.md 应使用项目根目录相对命令');
   assert(defaultDirWorkspace.kind === 'sk-engine-workspace', '.engine-workspace.json 应声明 workspace 类型');
   assert(defaultDirWorkspace.files.project === 'project.json', '.engine-workspace.json 应记录 project.json 入口');
   assert(defaultDirWorkspace.commands.run.includes('sk run --project-dir .'), '.engine-workspace.json 应记录运行命令');
+  assert(defaultDirWorkspace.intentRules.newFeature.requiredFlow[0] === 'create_prd_json', '.engine-workspace.json 应约定新需求先创建 PRD JSON');
+  assert(defaultDirWorkspace.intentRules.newFeature.forbiddenBeforePrdApproval.includes('edit_base_code'), '.engine-workspace.json 应限制 PRD 确认前不能改业务代码');
   assert(defaultDirWorkspace.bases.length === 3, '.engine-workspace.json 应记录三端基座');
 
   const projectDir = path.join(baseDir, 'engin-projects', 'name-only-demo');
