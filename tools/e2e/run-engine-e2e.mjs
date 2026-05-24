@@ -2173,6 +2173,14 @@ function testCodexAdapterExecPromptShape(baseDir) {
   assert(result.summary.taskSummary.done.includes('TASK-001'), 'codex exec prompt 形态应可执行');
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   assert(taskRun.attempts[0].summary.includes('fake codex ok'), 'codex fake 应收到 prompt 并执行成功');
+  assert(taskRun.attempts[0].logs.length === 2, 'process agent 应记录 stdout/stderr 日志路径');
+  assert(taskRun.attempts[0].logs.every((log) => fs.existsSync(log.path)), 'process agent 日志文件应真实存在');
+  const showTask = runRecoveryShowTask([
+    '--feature-dir', paths.dir,
+    '--run-state', paths.runState,
+    '--task-id', 'TASK-001',
+  ]);
+  assert(showTask.diagnostics.agentLogPaths.length === 2, 'show-task diagnostics 应列出 agent 日志');
 }
 
 function testCodexAdapterDefaultsToExec(baseDir) {
@@ -2611,6 +2619,7 @@ function testRecoveryAllowRunningRetry(baseDir) {
   assert(result.fromStatus === 'running' && result.toStatus === 'ready', 'running retry --allow-running 应恢复 ready');
   assert(after.taskStates['TASK-001'].status === 'ready', 'allow-running 应写回 ready');
   assert(after.activeRunLock === null && after.currentTaskId === null, 'allow-running 应清理运行锁和 currentTaskId');
+  assert(after.status === 'paused', 'allow-running 恢复后顶层状态应重算为 paused');
 }
 
 function testRecoveryAllowDoneRetry(baseDir) {

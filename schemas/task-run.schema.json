@@ -84,6 +84,19 @@
             }
           },
           "summary": { "type": "string" },
+          "logs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type", "path"],
+              "additionalProperties": false,
+              "properties": {
+                "type": { "type": "string", "enum": ["stdout", "stderr", "combined", "log"] },
+                "path": { "type": "string" }
+              }
+            },
+            "default": []
+          },
           "errors": { "type": "array", "items": { "type": "string" }, "default": [] },
           "nextActions": { "type": "array", "items": { "type": "string" }, "default": [] }
         }

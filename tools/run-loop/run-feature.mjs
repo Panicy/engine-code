@@ -265,6 +265,21 @@ function releaseLock(runState) {
   runState.updatedAt = nowIso();
 }
 
+function recomputeRunStatus(runState) {
+  const hasException = Object.values(runState.taskStates).some((state) => ['checks_failed', 'review_failed', 'needs_human'].includes(state.status));
+  const hasUnfinished = Object.values(runState.taskStates).some((state) => !['done', 'cancelled'].includes(state.status));
+  return hasException ? 'failed' : hasUnfinished ? 'paused' : 'complete';
+}
+
+function normalizeDanglingRunningStatus(runState) {
+  const hasRunningTask = Object.values(runState.taskStates ?? {}).some((state) => state.status === 'running');
+  if (runState.status !== 'running' || runState.activeRunLock || hasRunningTask) return false;
+  runState.status = recomputeRunStatus(runState);
+  runState.currentTaskId = null;
+  runState.updatedAt = nowIso();
+  return true;
+}
+
 function promotePending(runState, tasksById) {
   let changed = false;
   for (const [taskId, state] of Object.entries(runState.taskStates)) {
@@ -331,6 +346,7 @@ function buildTaskRun({ runState, task, attempt, status, startedAt, finishedAt, 
     changedFiles: changedFiles ?? [],
     checks: outcome.checks ?? [],
     summary: outcome.summary ?? '',
+    logs: outcome.logs ?? [],
     errors: outcome.errors ?? [],
     nextActions: outcome.nextActions ?? [],
   };
@@ -380,6 +396,15 @@ function validateAdapterOutcome(outcome, adapterId) {
   }
   if (!outcome.agent?.tool || !outcome.agent?.model) {
     throw new Error(`${adapterId} adapter 必须返回 agent.tool 和 agent.model。`);
+  }
+}
+
+function recordOutcomeArtifacts(runState, outcome) {
+  for (const log of outcome.logs ?? []) {
+    if (!log?.path) continue;
+    if (!runState.artifacts.some((artifact) => artifact.type === 'log' && artifact.path === log.path)) {
+      runState.artifacts.push({ type: 'log', path: log.path });
+    }
   }
 }
 
@@ -582,7 +607,8 @@ async function runLoop(args) {
   });
   validateOrThrow(preReport, 'Run Loop 前置 Validator');
   const recoveredTaskIds = recoverStaleRunningTasks(runState);
-  if (recoveredTaskIds.length > 0) writeJsonAtomic(args['run-state'], runState);
+  const normalizedDanglingStatus = normalizeDanglingRunningStatus(runState);
+  if (recoveredTaskIds.length > 0 || normalizedDanglingStatus) writeJsonAtomic(args['run-state'], runState);
 
   const executedTaskIds = [];
   acquireLock(runState, owner, startedAt);
@@ -640,6 +666,7 @@ async function runLoop(args) {
           taskContextPath,
         });
         validateAdapterOutcome(outcome, adapter.id);
+        recordOutcomeArtifacts(runState, outcome);
         const afterGitSnapshot = collectGitDiffSnapshot(taskContext.base.workspaceAbs);
         const changedFiles = changedFilesBetweenSnapshots(beforeGitSnapshot, afterGitSnapshot);
         const changeAwareOutcome = normalizeOutcomeWithChangedFiles({ outcome, adapterId: adapter.id, changedFiles, args });
@@ -735,6 +762,7 @@ async function runLoop(args) {
             changedFiles: [],
             outcome: orchestratorFailureOutcome(error),
           });
+          recordOutcomeArtifacts(runState, orchestratorFailureOutcome(error));
           const mergedTaskRun = mergeTaskRun(readJsonIfExists(taskRunPath), taskRun);
           schemaValidateArtifact('task-run', mergedTaskRun, taskRunPath);
           writeJsonAtomic(taskRunPath, mergedTaskRun);
@@ -755,9 +783,7 @@ async function runLoop(args) {
     }
   } finally {
     releaseLock(runState);
-    const unfinished = Object.values(runState.taskStates).some((state) => !['done', 'cancelled'].includes(state.status));
-    const hasException = Object.values(runState.taskStates).some((state) => ['checks_failed', 'review_failed', 'needs_human'].includes(state.status));
-    runState.status = hasException ? 'failed' : unfinished ? 'paused' : 'complete';
+    runState.status = recomputeRunStatus(runState);
     writeJsonAtomic(args['run-state'], runState);
   }
 

@@ -30,7 +30,7 @@ node tools/recovery/show-task.mjs \
 
 Shows task state, `lastIssue`, task-run attempt summaries, and review summary. Missing review is returned as `null`.
 
-The output includes `diagnostics` with the active lock and whether `task-context.json`, `task-run.json`, and `review.json` exist for the task.
+The output includes `diagnostics` with the active lock, whether `task-context.json`, `task-run.json`, and `review.json` exist for the task, and any process-agent stdout/stderr log paths already created under the task run directory.
 
 ## Resolve Task
 

@@ -87,6 +87,15 @@ function summarizeReview(review) {
   };
 }
 
+function listAgentLogs(taskDir) {
+  const absTaskDir = path.resolve(repoRoot, taskDir);
+  if (!fs.existsSync(absTaskDir)) return [];
+  return fs.readdirSync(absTaskDir)
+    .filter((entry) => /-(attempt-\d+)-(stdout|stderr)\.log$/.test(entry))
+    .sort()
+    .map((entry) => path.join(taskDir, entry));
+}
+
 function main() {
   try {
     const args = parseArgs(process.argv);
@@ -120,6 +129,7 @@ function main() {
         taskContextExists: fileExists(taskContextPath),
         taskRunExists: fileExists(taskRunPath),
         reviewExists: fileExists(reviewPath),
+        agentLogPaths: listAgentLogs(taskDir),
       },
       taskRun: summarizeTaskRun(taskRun),
       review: summarizeReview(review),

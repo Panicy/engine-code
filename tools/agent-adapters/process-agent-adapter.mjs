@@ -1,13 +1,27 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-function outputSummary(result) {
-  const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+function readTextIfExists(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return '';
+  return fs.readFileSync(filePath, 'utf8');
+}
+
+function outputSummary(result, logs = []) {
+  const output = [
+    result.stdout,
+    result.stderr,
+    ...logs.map((log) => readTextIfExists(log.path)),
+  ].filter(Boolean).join('\n').trim();
   return output ? output.slice(0, 1000) : `exit ${result.status ?? 'unknown'}`;
 }
 
-function outputText(result) {
-  return [result.stdout, result.stderr].filter(Boolean).join('\n');
+function outputText(result, logs = []) {
+  return [
+    result.stdout,
+    result.stderr,
+    ...logs.map((log) => readTextIfExists(log.path)),
+  ].filter(Boolean).join('\n');
 }
 
 function indicatesWriteBlocked(output) {
@@ -48,8 +62,31 @@ function needsHuman({ tool, model, summary, errors, nextActions = ['检查 Agent
     changedFiles: [],
     checks: [],
     summary,
+    logs: [],
     errors,
     nextActions,
+  };
+}
+
+function prepareProcessLogs({ taskContextPath, id, attempt }) {
+  if (!taskContextPath) return { stdio: ['ignore', 'pipe', 'pipe'], logs: [], close: () => {} };
+  const taskDir = path.dirname(taskContextPath);
+  fs.mkdirSync(taskDir, { recursive: true });
+  const suffix = `attempt-${attempt ?? 'unknown'}`;
+  const stdoutPath = path.join(taskDir, `${id}-${suffix}-stdout.log`);
+  const stderrPath = path.join(taskDir, `${id}-${suffix}-stderr.log`);
+  const stdoutFd = fs.openSync(stdoutPath, 'w');
+  const stderrFd = fs.openSync(stderrPath, 'w');
+  return {
+    stdio: ['ignore', stdoutFd, stderrFd],
+    logs: [
+      { type: 'stdout', path: stdoutPath },
+      { type: 'stderr', path: stderrPath },
+    ],
+    close: () => {
+      fs.closeSync(stdoutFd);
+      fs.closeSync(stderrFd);
+    },
   };
 }
 
@@ -70,7 +107,7 @@ function createProcessAgentAdapter(config) {
     id,
     tool,
     model,
-    execute({ args, taskContext, taskContextPath }) {
+    execute({ args, taskContext, taskContextPath, attempt }) {
       const command = args[`${argPrefix}-command`] ?? defaultCommand;
       const cwd = taskContext.base.workspaceAbs;
       const currentModel = args[`${argPrefix}-model`] ?? model;
@@ -122,43 +159,59 @@ function createProcessAgentAdapter(config) {
       }
       spawnArgs.push(buildPrompt(taskContextPath, label));
 
-      const result = spawnSync(command, spawnArgs, {
-        cwd,
-        shell: false,
-        encoding: 'utf8',
-        timeout: timeoutMs,
-        maxBuffer: 1024 * 1024,
-      });
-      const summary = outputSummary(result);
+      const processLogs = prepareProcessLogs({ taskContextPath, id, attempt });
+      let result;
+      try {
+        result = spawnSync(command, spawnArgs, {
+          cwd,
+          shell: false,
+          encoding: 'utf8',
+          timeout: timeoutMs,
+          maxBuffer: 1024 * 1024,
+          stdio: processLogs.stdio,
+        });
+      } finally {
+        processLogs.close();
+      }
+      const summary = outputSummary(result, processLogs.logs);
       if (result.error) {
         const isTimeout = result.error.code === 'ETIMEDOUT';
         const message = isTimeout ? `${id} command timeout after ${timeoutMs}ms` : `${id} command failed to start: ${result.error.message}`;
-        return needsHuman({
-          tool,
-          model: currentModel,
-          summary: message,
-          errors: [message],
-        });
+        return {
+          ...needsHuman({
+            tool,
+            model: currentModel,
+            summary: message,
+            errors: [message],
+          }),
+          logs: processLogs.logs,
+        };
       }
       if (result.status !== 0) {
-        return needsHuman({
-          tool,
-          model: currentModel,
-          summary,
-          errors: [`${id} command exited with status ${result.status}: ${command}`],
-        });
+        return {
+          ...needsHuman({
+            tool,
+            model: currentModel,
+            summary,
+            errors: [`${id} command exited with status ${result.status}: ${command}`],
+          }),
+          logs: processLogs.logs,
+        };
       }
-      if (indicatesWriteBlocked(outputText(result))) {
-        return needsHuman({
-          tool,
-          model: currentModel,
-          summary: `${id} adapter 输出显示执行环境不可写：${summary}`,
-          errors: [`${id} adapter write blocked`],
-          nextActions: [
-            `请用可写 sandbox 重跑，例如为 Codex 使用 --${argPrefix}-extra-arg --sandbox --${argPrefix}-extra-arg workspace-write。`,
-            '如任务已被误标为 done，可使用 recovery retry --allow-done 合规恢复后重跑。',
-          ],
-        });
+      if (indicatesWriteBlocked(outputText(result, processLogs.logs))) {
+        return {
+          ...needsHuman({
+            tool,
+            model: currentModel,
+            summary: `${id} adapter 输出显示执行环境不可写：${summary}`,
+            errors: [`${id} adapter write blocked`],
+            nextActions: [
+              `请用可写 sandbox 重跑，例如为 Codex 使用 --${argPrefix}-extra-arg --sandbox --${argPrefix}-extra-arg workspace-write。`,
+              '如任务已被误标为 done，可使用 recovery retry --allow-done 合规恢复后重跑。',
+            ],
+          }),
+          logs: processLogs.logs,
+        };
       }
       return {
         requestedStatus: 'done',
@@ -169,6 +222,7 @@ function createProcessAgentAdapter(config) {
         changedFiles: [],
         checks: [],
         summary,
+        logs: processLogs.logs,
         errors: [],
         nextActions: [],
       };

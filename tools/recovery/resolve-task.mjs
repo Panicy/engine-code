@@ -104,6 +104,14 @@ function assertValidRunState(runState, filePath) {
   }
 }
 
+function recomputeRunStatus(runState) {
+  const hasActiveRun = Boolean(runState.activeRunLock) || Object.values(runState.taskStates).some((state) => state.status === 'running');
+  if (hasActiveRun) return 'running';
+  const hasIssue = Object.values(runState.taskStates).some((state) => ['checks_failed', 'review_failed', 'needs_human'].includes(state.status));
+  const hasUnfinished = Object.values(runState.taskStates).some((state) => !['done', 'cancelled'].includes(state.status));
+  return hasIssue ? 'failed' : hasUnfinished ? 'paused' : 'complete';
+}
+
 function main() {
   try {
     const args = parseArgs(process.argv);
@@ -140,11 +148,7 @@ function main() {
     }
     if (runState.currentTaskId === args['task-id']) runState.currentTaskId = null;
     runState.updatedAt = decidedAt;
-    if (!['running'].includes(runState.status)) {
-      const hasIssue = Object.values(runState.taskStates).some((state) => ['checks_failed', 'review_failed', 'needs_human'].includes(state.status));
-      const hasUnfinished = Object.values(runState.taskStates).some((state) => !['done', 'cancelled'].includes(state.status));
-      runState.status = hasIssue ? 'failed' : hasUnfinished ? 'paused' : 'complete';
-    }
+    runState.status = recomputeRunStatus(runState);
     const decision = {
       id: nextDecisionId(runState),
       text: `${args.by} ${args.action} ${args['task-id']}: ${args.reason}`,
