@@ -15,17 +15,17 @@
 sk init-project \
   --project-id demo \
   --name 示例项目 \
-  --project-dir ../sk-projects/demo \
+  --project-dir ../engin-projects/demo \
   --backend /path/to/backend \
   --middle /path/to/middle \
   --client /path/to/client
 ```
 
-如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../sk-projects/<project-id>/project.json`。
+如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../engin-projects/<project-id>/project.json`。
 
 ```bash
 sk init-feature \
-  --project-dir ../sk-projects/demo \
+  --project-dir ../engin-projects/demo \
   --feature-id app-management \
   --name 应用管理 \
   --summary 应用新增、编辑、上下架和列表查询 \
@@ -36,14 +36,14 @@ sk init-feature \
 
 ```bash
 sk runtime \
-  --project-dir ../sk-projects/demo \
+  --project-dir ../engin-projects/demo \
   --feature-id app-management \
   --mode check
 ```
 
 ```bash
 sk run \
-  --project-dir ../sk-projects/demo \
+  --project-dir ../engin-projects/demo \
   --feature-id app-management \
   --agent-adapter shell \
   --shell-command "your-agent-command" \
@@ -53,7 +53,7 @@ sk run \
 
 ```bash
 sk status \
-  --project-dir ../sk-projects/demo \
+  --project-dir ../engin-projects/demo \
   --feature-id app-management
 ```
 

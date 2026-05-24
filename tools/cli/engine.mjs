@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, '../..');
-const defaultProjectsRoot = path.resolve(repoRoot, '..', 'sk-projects');
+const defaultProjectsRoot = path.resolve(repoRoot, '..', 'engin-projects');
 
 const defaultBases = {
   backend: {
@@ -39,12 +39,12 @@ function usage() {
     '  cancel         取消 needs_human task',
     '',
     'Examples:',
-    '  sk init-project --project-id demo --name 示例 --project-dir ../sk-projects/demo --backend /path/backend --middle /path/middle',
-    '  sk init-feature --project-dir ../sk-projects/demo --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
-    '  sk runtime --project-dir ../sk-projects/demo --feature-id app --mode mock',
-    '  sk run --project-dir ../sk-projects/demo --feature-id app --runtime-mode mock --checks-mode mock',
+    '  sk init-project --project-id demo --name 示例 --project-dir ../engin-projects/demo --backend /path/backend --middle /path/middle',
+    '  sk init-feature --project-dir ../engin-projects/demo --feature-id app --name 应用管理 --summary 管理应用 --bases backend,middle --approve --by human',
+    '  sk runtime --project-dir ../engin-projects/demo --feature-id app --mode mock',
+    '  sk run --project-dir ../engin-projects/demo --feature-id app --runtime-mode mock --checks-mode mock',
     '  MYSQL_PWD=romantic. sk real-test --mysql-command /usr/local/mysql/bin/mysql --mysql-user root --mysql-password-env MYSQL_PWD --database aitest --redis-url redis://default:root123@127.0.0.1:6379',
-    '  sk status --project-dir ../sk-projects/demo --feature-id app',
+    '  sk status --project-dir ../engin-projects/demo --feature-id app',
   ].join('\n');
 }
 

@@ -1122,7 +1122,7 @@ function testEngineCliThinFlow(baseDir) {
 function testEngineCliProjectDir(baseDir) {
   const root = path.join(baseDir, 'engine-cli-project-dir');
   const backendWorkspace = path.join(root, 'backend');
-  const projectDir = path.join(root, 'sk-projects', 'project-dir-demo');
+  const projectDir = path.join(root, 'engin-projects', 'project-dir-demo');
   initGitWorkspace(backendWorkspace, { 'README.md': 'backend workspace\n' });
 
   const projectResult = parseCommandJson(runNode([
