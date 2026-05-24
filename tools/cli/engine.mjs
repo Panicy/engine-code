@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -57,7 +58,7 @@ function parseOptions(argv) {
       continue;
     }
     const key = arg.slice(2);
-    if (['force', 'approve', 'keep-tmp', 'skip-bootstrap'].includes(key)) {
+    if (['force', 'approve', 'keep-tmp', 'skip-bootstrap', 'skip-bases'].includes(key)) {
       options[key] = true;
       continue;
     }
@@ -92,15 +93,31 @@ function slugifyProjectName(name) {
   return slug || `project-${compactTimestamp()}`;
 }
 
-function runNode(script, args) {
+function runNode(script, args, options = {}) {
   const result = spawnSync(process.execPath, [script, ...args], {
     cwd: repoRoot,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  if (result.stdout) process.stdout.write(result.stdout);
-  if (result.stderr) process.stderr.write(result.stderr);
+  if (!options.quiet && result.stdout) process.stdout.write(result.stdout);
+  if (!options.quiet && result.stderr) process.stderr.write(result.stderr);
   if (result.status !== 0) process.exit(result.status ?? 1);
+  return result;
+}
+
+function runCommand(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd ?? repoRoot,
+    encoding: 'utf8',
+    stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
+    timeout: options.timeoutMs ?? 600000,
+  });
+  if (!options.quiet && result.stdout) process.stdout.write(result.stdout);
+  if (!options.quiet && result.stderr) process.stderr.write(result.stderr);
+  if (result.status !== 0) {
+    throw new Error(`命令失败：${command} ${args.join(' ')}`);
+  }
+  return result;
 }
 
 function projectRoot(projectId, options = {}) {
@@ -137,6 +154,44 @@ function featureFiles(featureDir) {
   };
 }
 
+function parseBaseString(value) {
+  const parts = value.split(':');
+  const [baseId, templateId, ...rest] = parts;
+  const workspace = rest.pop();
+  const repo = rest.join(':');
+  return { baseId, templateId, repo, workspace };
+}
+
+function prepareBaseWorkspace(base, cloneMode, force) {
+  if (!base.workspace) throw new Error(`base ${base.baseId} 缺少 workspace`);
+  if (fs.existsSync(base.workspace)) {
+    const entries = fs.readdirSync(base.workspace).filter((entry) => entry !== '.DS_Store');
+    if (entries.length > 0) {
+      if (!force) throw new Error(`base workspace 已存在且非空：${base.workspace}。如确认覆盖，请先清理目录或使用 --skip-bases。`);
+      return { baseId: base.baseId, workspace: base.workspace, skipped: true, reason: 'workspace exists' };
+    }
+  }
+  fs.mkdirSync(path.dirname(base.workspace), { recursive: true });
+  if (cloneMode === 'source-template') {
+    const source = path.resolve(repoRoot, '.engine/source-templates', base.templateId);
+    if (!fs.existsSync(source)) throw new Error(`source template 不存在：${source}`);
+    fs.cpSync(source, base.workspace, {
+      recursive: true,
+      filter: (sourcePath) => !sourcePath.includes(`${path.sep}.git${path.sep}`) && !sourcePath.endsWith(`${path.sep}.git`),
+    });
+    runCommand('git', ['init'], { cwd: base.workspace, quiet: true });
+    runCommand('git', ['config', 'user.email', 'sk@example.test'], { cwd: base.workspace, quiet: true });
+    runCommand('git', ['config', 'user.name', 'SK Engine'], { cwd: base.workspace, quiet: true });
+    runCommand('git', ['remote', 'add', 'origin', base.repo], { cwd: base.workspace, quiet: true });
+    runCommand('git', ['add', '.'], { cwd: base.workspace, quiet: true });
+    runCommand('git', ['commit', '-m', 'baseline'], { cwd: base.workspace, quiet: true });
+    return { baseId: base.baseId, workspace: base.workspace, cloneMode };
+  }
+  if (cloneMode !== 'git') throw new Error('--clone-mode 必须是 git 或 source-template');
+  runCommand('git', ['clone', '--depth', '1', base.repo, base.workspace], { timeoutMs: 600000, quiet: true });
+  return { baseId: base.baseId, workspace: base.workspace, cloneMode };
+}
+
 function initProject(options) {
   const name = options.name ?? options._.join(' ');
   if (!name) throw new Error('缺少参数 --name，或在 init-project 后直接输入项目名称');
@@ -169,7 +224,20 @@ function initProject(options) {
     args.push('--allow-missing-workspace');
   }
   if (options.force) args.push('--force');
-  runNode(args[0], args.slice(1));
+  const projectResult = runNode(args[0], args.slice(1), { quiet: true });
+  const projectSummary = JSON.parse(projectResult.stdout);
+  const preparedBases = [];
+  const shouldPrepareBases = !hasExplicitBases && !options['skip-bases'];
+  if (shouldPrepareBases) {
+    const cloneMode = options['clone-mode'] ?? 'git';
+    preparedBases.push(...bases.map((base) => prepareBaseWorkspace(parseBaseString(base), cloneMode, options.force)));
+  }
+  console.log(JSON.stringify({
+    ...projectSummary,
+    projectDir: path.dirname(out),
+    basesPrepared: shouldPrepareBases,
+    preparedBases,
+  }, null, 2));
 }
 
 function initFeature(options) {

@@ -15,7 +15,19 @@
 sk init-project 示例项目
 ```
 
-如果不传 `--project-id`，CLI 会自动生成一个安全 ID。如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../engin-projects/<project-id>/project.json`。不传三端路径时，会自动登记固定三端基座，workspace 预留为项目目录下的 `bases/backend`、`bases/middle`、`bases/client`。
+如果不传 `--project-id`，CLI 会自动生成一个安全 ID。如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../engin-projects/<project-id>/project.json`。不传三端路径时，会自动 clone 固定三端基座到项目目录下的 `bases/backend`、`bases/middle`、`bases/client`。
+
+调试时可以跳过基座准备：
+
+```bash
+sk init-project 示例项目 --skip-bases
+```
+
+也可以使用本地 source template 快速初始化：
+
+```bash
+sk init-project 示例项目 --clone-mode source-template
+```
 
 ```bash
 sk init-feature \

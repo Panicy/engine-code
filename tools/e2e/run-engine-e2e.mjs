@@ -1178,6 +1178,7 @@ function testEngineCliInitProjectNameOnly(baseDir) {
     'init-project',
     '示例项目',
     '--project-dir', projectDir,
+    '--clone-mode', 'source-template',
     '--force',
   ]));
   assert(result.ok === true, 'CLI init-project 仅输入名称应成功');
@@ -1188,6 +1189,9 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   assert(project.bases.length === 3, '未传 base/workspace 时应自动登记固定三端基座');
   assert(project.bases.map((base) => base.baseId).join(',') === 'backend,middle,client', '固定三端基座顺序应稳定');
   assert(project.bases.every((base) => base.workspace.startsWith(path.join(projectDir, 'bases'))), '默认 workspace 应预留在项目目录 bases 下');
+  assert(result.basesPrepared === true, '仅输入名称时应默认准备三端基座');
+  assert(result.preparedBases.length === 3, '仅输入名称时应准备三端基座 workspace');
+  assert(fs.existsSync(path.join(projectDir, 'bases', 'backend', '.git')), 'source-template 初始化后 backend workspace 应存在 git baseline');
 }
 
 function testEngineCliRealTestSourceTemplate() {
