@@ -247,6 +247,16 @@ function writeFileIfAllowed(filePath, content, force) {
   return filePath;
 }
 
+function renderProjectGitignore() {
+  return [
+    'bases/',
+    'node_modules/',
+    '.DS_Store',
+    '*.log',
+    '',
+  ].join('\n');
+}
+
 function renderEngineMarkdown(project, projectDir) {
   const bases = (project.bases ?? [])
     .map((base) => [
@@ -387,6 +397,7 @@ function renderEngineMarkdown(project, projectDir) {
     'project.json',
     'ENGINE.md',
     '.engine-workspace.json',
+    '.gitignore',
     'bases/',
     '  backend/',
     '  middle/',
@@ -424,6 +435,12 @@ function renderEngineMarkdown(project, projectDir) {
     '## 机器可读约定',
     '',
     'AI 编辑器或后续 UI 必须优先读取 `.engine-workspace.json` 中的 `intentRules`、`commands`、`files` 和 `aiEditorRules` 获取项目入口、默认命令和目录约定。',
+    '',
+    '## Git 约定',
+    '',
+    '项目根目录是独立 git 仓库，用于管理 `project.json`、`ENGINE.md`、`.engine-workspace.json` 和 `features/` 下的 PRD、任务拆分、运行状态等引擎产物。',
+    '',
+    '`bases/` 下的 backend、middle、client 是各自独立的业务代码仓库，不纳入项目根仓库提交。',
     '',
   ].join('\n');
 }
@@ -549,12 +566,32 @@ function buildEngineWorkspace(project, projectDir) {
 function writeProjectConventions(project, projectDir, force) {
   const guidePath = path.join(projectDir, 'ENGINE.md');
   const workspacePath = path.join(projectDir, '.engine-workspace.json');
+  const gitignorePath = path.join(projectDir, '.gitignore');
   writeFileIfAllowed(guidePath, `${renderEngineMarkdown(project, projectDir)}\n`, force);
   writeFileIfAllowed(workspacePath, `${JSON.stringify(buildEngineWorkspace(project, projectDir), null, 2)}\n`, force);
+  writeFileIfAllowed(gitignorePath, renderProjectGitignore(), force);
   return {
     guidePath,
     workspacePath,
+    gitignorePath,
   };
+}
+
+function initializeProjectGit(projectDir, force) {
+  const gitDir = path.join(projectDir, '.git');
+  if (fs.existsSync(gitDir)) {
+    return { initialized: false, skipped: true, reason: 'git repository exists' };
+  }
+  runCommand('git', ['init'], { cwd: projectDir, quiet: true });
+  runCommand('git', ['config', 'user.email', 'sk@example.test'], { cwd: projectDir, quiet: true });
+  runCommand('git', ['config', 'user.name', 'SK Engine'], { cwd: projectDir, quiet: true });
+  runCommand('git', ['add', '.'], { cwd: projectDir, quiet: true });
+  const status = runCommand('git', ['status', '--short'], { cwd: projectDir, quiet: true });
+  if (!status.stdout.trim()) {
+    return { initialized: true, committed: false, reason: 'nothing to commit' };
+  }
+  runCommand('git', ['commit', '-m', 'chore: initialize sk project'], { cwd: projectDir, quiet: true });
+  return { initialized: true, committed: true };
 }
 
 function initProject(options) {
@@ -599,10 +636,12 @@ function initProject(options) {
     const cloneMode = options['clone-mode'] ?? 'git';
     preparedBases.push(...bases.map((base) => prepareBaseWorkspace(parseBaseString(base), cloneMode, options.force)));
   }
+  const projectGit = initializeProjectGit(path.dirname(out), options.force);
   console.log(JSON.stringify({
     ...projectSummary,
     projectDir: path.dirname(out),
     conventionFiles,
+    projectGit,
     basesPrepared: shouldPrepareBases,
     preparedBases,
   }, null, 2));

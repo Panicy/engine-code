@@ -15,7 +15,7 @@
 sk init-project 示例项目
 ```
 
-如果不传 `--project-id`，CLI 会根据名称生成一个稳定安全 ID。如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../engin-projects/<项目名称>/project.json`。不传三端路径时，会自动 clone 固定三端基座到项目目录下的 `bases/backend`、`bases/middle`、`bases/client`，并生成 `ENGINE.md` 与 `.engine-workspace.json` 作为人和 AI 编辑器共同遵守的项目约定。
+如果不传 `--project-id`，CLI 会根据名称生成一个稳定安全 ID。如果不传 `--project-dir` 或 `--out`，CLI 默认写入引擎仓库旁边的 `../engin-projects/<项目名称>/project.json`。不传三端路径时，会自动 clone 固定三端基座到项目目录下的 `bases/backend`、`bases/middle`、`bases/client`，并生成 `ENGINE.md`、`.engine-workspace.json` 和项目根 git 仓库。项目根 git 只管理引擎产物，`bases/` 下三端业务基座仍是各自独立仓库。
 
 调试时可以跳过基座准备：
 

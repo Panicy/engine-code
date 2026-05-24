@@ -1200,9 +1200,14 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   assert(defaultDirResult.outputPath === path.join(projectsRoot, '示例项目', 'project.json'), '中文名称应作为默认项目目录名');
   assert(defaultDirResult.conventionFiles.guidePath === path.join(projectsRoot, '示例项目', 'ENGINE.md'), 'init-project 应生成 ENGINE.md');
   assert(defaultDirResult.conventionFiles.workspacePath === path.join(projectsRoot, '示例项目', '.engine-workspace.json'), 'init-project 应生成 .engine-workspace.json');
+  assert(defaultDirResult.conventionFiles.gitignorePath === path.join(projectsRoot, '示例项目', '.gitignore'), 'init-project 应生成项目根 .gitignore');
+  assert(defaultDirResult.projectGit.initialized === true, 'init-project 应初始化项目根 git 仓库');
+  assert(defaultDirResult.projectGit.committed === true, 'init-project 应提交项目根初始引擎产物');
+  assert(fs.existsSync(path.join(projectsRoot, '示例项目', '.git')), '项目根目录应存在独立 git 仓库');
   const defaultDirProject = readJson(defaultDirResult.outputPath);
   const defaultDirGuide = fs.readFileSync(defaultDirResult.conventionFiles.guidePath, 'utf8');
   const defaultDirWorkspace = readJson(defaultDirResult.conventionFiles.workspacePath);
+  const defaultDirGitignore = fs.readFileSync(defaultDirResult.conventionFiles.gitignorePath, 'utf8');
   assert(defaultDirProject.projectId.startsWith('project-'), '中文名称未提供 project-id 时应生成安全 projectId');
   assert(!/^project-\d{14}$/.test(defaultDirProject.projectId), '中文名称生成的 projectId 不应退回时间戳随机值');
   assert(defaultDirGuide.includes('当用户提出新需求时'), 'ENGINE.md 应包含新需求入口约定');
@@ -1217,6 +1222,8 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   assert(defaultDirGuide.includes('PRD 未经人工确认前'), 'ENGINE.md 应限制 PRD 确认前不能开发');
   assert(defaultDirGuide.includes('AI 编辑器规则'), 'ENGINE.md 应包含 AI 编辑器协作规则');
   assert(defaultDirGuide.includes('sk run --project-dir .'), 'ENGINE.md 应使用项目根目录相对命令');
+  assert(defaultDirGuide.includes('项目根目录是独立 git 仓库'), 'ENGINE.md 应说明项目根 git 约定');
+  assert(defaultDirGitignore.includes('bases/'), '项目根 .gitignore 应忽略 bases/');
   assert(defaultDirWorkspace.kind === 'sk-engine-workspace', '.engine-workspace.json 应声明 workspace 类型');
   assert(defaultDirWorkspace.files.project === 'project.json', '.engine-workspace.json 应记录 project.json 入口');
   assert(defaultDirWorkspace.commands.run.includes('sk run --project-dir .'), '.engine-workspace.json 应记录运行命令');
@@ -1228,6 +1235,11 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   assert(defaultDirWorkspace.approvalRules.forbiddenFlagsWithoutExplicitUserConfirmation.includes('--by human'), '.engine-workspace.json 应限制 --by human');
   assert(defaultDirWorkspace.prdQualityGate.blockApprovalWhenOpenQuestionsExist === true, '.engine-workspace.json 应记录 PRD openQuestions 门禁');
   assert(defaultDirWorkspace.bases.length === 3, '.engine-workspace.json 应记录三端基座');
+  const trackedFiles = runCommand('git', ['ls-files'], { cwd: path.join(projectsRoot, '示例项目') }).stdout;
+  assert(trackedFiles.includes('project.json'), '项目根 git 应跟踪 project.json');
+  assert(trackedFiles.includes('ENGINE.md'), '项目根 git 应跟踪 ENGINE.md');
+  assert(trackedFiles.includes('.engine-workspace.json'), '项目根 git 应跟踪 .engine-workspace.json');
+  assert(!trackedFiles.includes('bases/backend'), '项目根 git 不应跟踪 bases/ 业务基座');
 
   const projectDir = path.join(baseDir, 'engin-projects', 'name-only-demo');
   const result = parseCommandJson(runNode([
