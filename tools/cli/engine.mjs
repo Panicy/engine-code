@@ -721,6 +721,7 @@ function run(options) {
   for (const key of [
     'templates-dir',
     'max-tasks',
+    'allow-empty-changes',
     'mock-fail-task',
     'mock-fail-stage',
     'mock-fail-check',

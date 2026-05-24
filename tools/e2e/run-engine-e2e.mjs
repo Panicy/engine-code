@@ -2043,6 +2043,7 @@ function testShellAdapterSuccess(baseDir) {
   const result = runLoop(paths, [
     '--agent-adapter', 'shell',
     '--shell-command', `${process.execPath} ${probePath}`,
+    '--allow-empty-changes', 'true',
   ]);
   assert(result.summary.taskSummary.done.includes('TASK-001'), 'shell adapter 成功时任务应 done');
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
@@ -2158,16 +2159,17 @@ function testCodexAdapterSuccessNoChanges(baseDir) {
   const fakeCodex = writeFakeCodex(baseDir);
   const paths = prepareGitDiffFeature(baseDir, 'codex-success-no-changes');
   const result = runLoop(paths, codexArgs(fakeCodex, 'success'));
-  assert(result.summary.taskSummary.done.includes('TASK-001'), 'codex fake 成功时任务应 done');
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), 'codex fake 成功但无变更时不应 done');
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   assert(taskRun.attempts[0].agent.tool === 'codex', 'task-run 应记录 codex agent');
   assert(taskRun.attempts[0].changedFiles.length === 0, 'codex 未改文件时 changedFiles 应为空');
+  assert(taskRun.attempts[0].errors.includes('codex agent produced no file changes'), 'codex 无变更应记录错误');
 }
 
 function testCodexAdapterExecPromptShape(baseDir) {
   const fakeCodex = writeFakeCodex(baseDir);
   const paths = prepareGitDiffFeature(baseDir, 'codex-exec-prompt-shape');
-  const result = runLoop(paths, codexExecArgs(fakeCodex, 'success'));
+  const result = runLoop(paths, codexExecArgs(fakeCodex, 'success', ['--allow-empty-changes', 'true']));
   assert(result.summary.taskSummary.done.includes('TASK-001'), 'codex exec prompt 形态应可执行');
   const taskRun = readJson(path.join(paths.dir, 'runs', 'TASK-001', 'task-run.json'));
   assert(taskRun.attempts[0].summary.includes('fake codex ok'), 'codex fake 应收到 prompt 并执行成功');
@@ -2180,6 +2182,7 @@ function testCodexAdapterDefaultsToExec(baseDir) {
     '--agent-adapter', 'codex',
     '--codex-command', fakeCodex,
     '--max-tasks', '1',
+    '--allow-empty-changes', 'true',
   ]);
   assert(result.summary.taskSummary.done.includes('TASK-001'), '未传 --codex-extra-arg 时应默认使用 exec 子命令');
 }
@@ -2220,7 +2223,7 @@ function testCodexAdapterIgnoresFakeChangedFiles(baseDir) {
   const fakeCodex = writeFakeCodex(baseDir);
   const paths = prepareGitDiffFeature(baseDir, 'codex-fake-changed-files');
   const result = runLoop(paths, codexArgs(fakeCodex, 'fake-changed-files'));
-  assert(result.summary.taskSummary.done.includes('TASK-001'), 'codex 仅输出伪造 changedFiles 时任务仍可 done');
+  assert(result.summary.taskSummary.needsHuman.includes('TASK-001'), 'codex 仅输出伪造 changedFiles 且无真实改动时不应 done');
   assert(firstAttemptChangedFiles(paths).length === 0, 'codex 输出的伪造 changedFiles 不应被采用');
 }
 
@@ -2404,6 +2407,7 @@ function testRealChecksUseBaseWorkspace(baseDir) {
     '--checks-mode', 'real',
     '--shell-command', `${process.execPath} -e "console.log('workspace-ok')"`,
     '--max-tasks', '1',
+    '--allow-empty-changes', 'true',
   ]);
   assert(result.summary.taskSummary.done.includes(firstTask.id), '真实 checks 应在 base workspace 中执行并通过');
   const taskRun = readJson(path.join(paths.dir, 'runs', firstTask.id, 'task-run.json'));

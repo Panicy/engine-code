@@ -58,6 +58,8 @@ sk run \
 
 真实 `runtime-mode check` 或 `checks-mode real/command` 必须显式指定 `--agent-adapter`，避免误用默认 mock agent。只做流程演练时使用：
 
+非 `mock` adapter 声称完成但没有产生真实文件变更时，Run Loop 会把 task 标记为 `needs_human`，避免“只解释不开发”被误判完成。
+
 ```bash
 sk run \
   --project-dir ../engin-projects/demo \

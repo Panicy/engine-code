@@ -23,6 +23,7 @@ Run Loop 是 AI 开发引擎的执行循环 MVP。当前版本通过 Agent Adapt
 - 同一轮内每个 task 最多执行一次，失败任务留到下一轮重跑。
 - `task-run.json` 会追加 attempts，不覆盖历史。
 - `task-run.json` 的 `changedFiles` 由目标基座 git diff 自动采集，不接受 adapter 自报。
+- 非 `mock` adapter 如果声称完成但没有产生任何真实文件变更，task 会进入 `needs_human`。只有纯探针或检查类任务才应显式使用 `--allow-empty-changes true`。
 - Run Loop 在调用 adapter 前必须生成 `runs/<taskId>/task-context.json`，并把实际 skill 文档路径和 SHA-256 写入 `task-run.json` 的 `skillContext`。如果 skill 文档缺失，任务会进入 `needs_human`，不会绕过 skill 执行。
 - `--runtime-mode mock|check` 会在开发任务前按模板 `runtimeProfile` 生成 `runs/runtime/<baseId>-runtime.json`。`skip` 为默认值，避免旧流程被本地环境阻断。
 - 调用 Validator 做后置校验。
@@ -45,6 +46,7 @@ node tools/run-loop/run-feature.mjs \
 --checks-mode real
 --runtime-mode skip
 --max-tasks 1
+--allow-empty-changes true
 --mock-fail-task TASK-001
 --mock-fail-stage check
 --mock-fail-check backend-compile
@@ -116,11 +118,10 @@ node tools/run-loop/run-feature.mjs \
   --run-state run-state.json \
   --agent-adapter codex \
   --codex-command codex \
-  --codex-extra-arg exec \
   --codex-model gpt-5
 ```
 
-Codex Adapter 只执行当前 task。Run Loop 会先写入 `runs/<taskId>/task-context.json`，Codex Adapter 再把该文件路径写入最后一个 prompt 参数，并要求执行器读取其中的 skill 文档。Adapter 不写 run-state/task-run/review，不执行 checks，不做 allowedPaths 审查，也不提供可信 `changedFiles`；可信变更列表仍由 Run Loop 的 git diff collector 采集。未传 `--codex-extra-arg` 时默认使用 `exec`，即默认调用形态接近 `codex exec "<prompt>"`。
+Codex Adapter 只执行当前 task。Run Loop 会先写入 `runs/<taskId>/task-context.json`，Codex Adapter 再把该文件路径写入最后一个 prompt 参数，并要求执行器读取其中的 skill 文档。Adapter 不写 run-state/task-run/review，不执行 checks，不做 allowedPaths 审查，也不提供可信 `changedFiles`；可信变更列表仍由 Run Loop 的 git diff collector 采集。未传 `--codex-extra-arg` 时默认使用 `exec --sandbox workspace-write`，即默认调用形态接近 `codex exec --sandbox workspace-write "<prompt>"`。
 
 External Agent 示例：
 

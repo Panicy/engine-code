@@ -29,6 +29,7 @@ function usage() {
     '  --checks-mode real|mock|command',
     '  --runtime-mode skip|mock|check',
     '  --max-tasks 0',
+    '  --allow-empty-changes true|false',
     '  --mock-fail-task TASK-001',
     '  --mock-fail-stage check|review|human',
     '  --mock-fail-check CHECK-001',
@@ -57,6 +58,7 @@ function parseArgs(argv) {
     'checks-mode',
     'runtime-mode',
     'max-tasks',
+    'allow-empty-changes',
     'mock-fail-task',
     'mock-fail-stage',
     'mock-fail-check',
@@ -379,6 +381,27 @@ function normalizeOutcomeWithReview({ outcome, review }) {
   };
 }
 
+function normalizeOutcomeWithChangedFiles({ outcome, adapterId, changedFiles, args }) {
+  if (outcome.requestedStatus !== 'done') return outcome;
+  if (adapterId === 'mock') return outcome;
+  if (args['allow-empty-changes'] === 'true') return outcome;
+  if (changedFiles.length > 0) return outcome;
+  return {
+    ...outcome,
+    requestedStatus: 'needs_human',
+    taskRunStatus: 'needs_human',
+    reviewVerdict: null,
+    source: 'executor',
+    summary: `${adapterId} agent completed without file changes; refusing to mark task done.`,
+    errors: [...(outcome.errors ?? []), `${adapterId} agent produced no file changes`],
+    nextActions: [
+      '确认 agent 是否只是解释而未开发。',
+      '使用可写 sandbox 重跑当前 task。',
+      '如果该 task 本来就不需要改文件，请显式使用 --allow-empty-changes true。',
+    ],
+  };
+}
+
 function artifactPath(featureDir, taskId, fileName) {
   return path.join(featureDir, 'runs', taskId, fileName);
 }
@@ -566,12 +589,13 @@ async function runLoop(args) {
         validateAdapterOutcome(outcome, adapter.id);
         const afterGitSnapshot = collectGitDiffSnapshot(taskContext.base.workspaceAbs);
         const changedFiles = changedFilesBetweenSnapshots(beforeGitSnapshot, afterGitSnapshot);
+        const changeAwareOutcome = normalizeOutcomeWithChangedFiles({ outcome, adapterId: adapter.id, changedFiles, args });
         const checkResult = runChecks(task, {
           mode: checksMode,
           cwd: taskContext.base.workspaceAbs,
           mockFailCheckId: args['mock-fail-check'] ?? '',
         });
-        const checkedOutcome = normalizeOutcomeWithChecks({ outcome, checkResult });
+        const checkedOutcome = normalizeOutcomeWithChecks({ outcome: changeAwareOutcome, checkResult });
         const finishedTaskAt = nowIso();
         const reviewTaskRun = { attempts: [{ attempt: state.attempts, changedFiles }] };
         const review = checkedOutcome.requestedStatus === 'done'
