@@ -1206,6 +1206,13 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   assert(defaultDirProject.projectId.startsWith('project-'), '中文名称未提供 project-id 时应生成安全 projectId');
   assert(!/^project-\d{14}$/.test(defaultDirProject.projectId), '中文名称生成的 projectId 不应退回时间戳随机值');
   assert(defaultDirGuide.includes('当用户提出新需求时'), 'ENGINE.md 应包含新需求入口约定');
+  assert(defaultDirGuide.includes('项目启动规则'), 'ENGINE.md 应包含项目启动规则');
+  assert(defaultDirGuide.includes('用户意图分类'), 'ENGINE.md 应包含用户意图分类');
+  assert(defaultDirGuide.includes('人工确认红线'), 'ENGINE.md 应包含人工确认红线');
+  assert(defaultDirGuide.includes('AI 编辑器不得代表 human 做人工确认'), 'ENGINE.md 应禁止 AI 代替 human 确认');
+  assert(defaultDirGuide.includes('生成 `prd.json` 后，AI 编辑器必须停下'), 'ENGINE.md 应要求 PRD 生成后停下等待确认');
+  assert(defaultDirGuide.includes('生成 `task-plan.json` 后，AI 编辑器必须再次停下'), 'ENGINE.md 应要求任务拆分生成后停下等待确认');
+  assert(defaultDirGuide.includes('PRD 质量门禁'), 'ENGINE.md 应包含 PRD 质量门禁');
   assert(defaultDirGuide.includes('用户自然语言需求'), 'ENGINE.md 应说明自然语言需求必须进入 PRD 流程');
   assert(defaultDirGuide.includes('PRD 未经人工确认前'), 'ENGINE.md 应限制 PRD 确认前不能开发');
   assert(defaultDirGuide.includes('AI 编辑器规则'), 'ENGINE.md 应包含 AI 编辑器协作规则');
@@ -1213,8 +1220,13 @@ function testEngineCliInitProjectNameOnly(baseDir) {
   assert(defaultDirWorkspace.kind === 'sk-engine-workspace', '.engine-workspace.json 应声明 workspace 类型');
   assert(defaultDirWorkspace.files.project === 'project.json', '.engine-workspace.json 应记录 project.json 入口');
   assert(defaultDirWorkspace.commands.run.includes('sk run --project-dir .'), '.engine-workspace.json 应记录运行命令');
+  assert(defaultDirWorkspace.intentRules.boot.requiredReads.includes('ENGINE.md'), '.engine-workspace.json 应要求启动读取 ENGINE.md');
   assert(defaultDirWorkspace.intentRules.newFeature.requiredFlow[0] === 'create_prd_json', '.engine-workspace.json 应约定新需求先创建 PRD JSON');
   assert(defaultDirWorkspace.intentRules.newFeature.forbiddenBeforePrdApproval.includes('edit_base_code'), '.engine-workspace.json 应限制 PRD 确认前不能改业务代码');
+  assert(defaultDirWorkspace.intentRules.newFeature.stopAfter.includes('create_prd_json'), '.engine-workspace.json 应要求创建 PRD 后停下');
+  assert(defaultDirWorkspace.approvalRules.aiMayApproveAsHuman === false, '.engine-workspace.json 应禁止 AI 作为 human 确认');
+  assert(defaultDirWorkspace.approvalRules.forbiddenFlagsWithoutExplicitUserConfirmation.includes('--by human'), '.engine-workspace.json 应限制 --by human');
+  assert(defaultDirWorkspace.prdQualityGate.blockApprovalWhenOpenQuestionsExist === true, '.engine-workspace.json 应记录 PRD openQuestions 门禁');
   assert(defaultDirWorkspace.bases.length === 3, '.engine-workspace.json 应记录三端基座');
 
   const projectDir = path.join(baseDir, 'engin-projects', 'name-only-demo');
